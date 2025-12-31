@@ -71,7 +71,7 @@ const AIChatPanel = () => {
           <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
             <div className="relative group">
               {/* Image Thumbnail */}
-              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-indigo-200 shadow-sm">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-brand-primary shadow-sm">
                 <img
                   src={selectedObject.getSrc()}
                   alt="Selected"
@@ -120,7 +120,7 @@ const AIChatPanel = () => {
               disabled={!prompt.trim() || isLoading}
               className={`p-2.5 rounded-lg transition-all ${
                 prompt.trim() && !isLoading
-                  ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                  ? "bg-brand-primary text-white hover:bg-brand-accent shadow-md hover:shadow-lg"
                   : "bg-gray-100 text-gray-300 cursor-not-allowed"
               }`}
             >

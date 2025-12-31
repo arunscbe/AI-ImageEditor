@@ -4,14 +4,53 @@
 
 @layer base {
   body {
-    @apply h-full overflow-hidden bg-gray-50 text-slate-900;
+    @apply h-full overflow-hidden bg-gray-50;
+    font-family: 'Rubik', sans-serif;
+    font-weight: 400;
+    line-height: 1.64em;
+    font-size: 17px;
+    color: #5f6973;
   }
   #root {
     @apply h-full w-full;
   }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Montserrat', sans-serif;
+    color: #545454;
+  }
+  h1 {
+    font-weight: 800;
+    line-height: 1.5em;
+    font-size: 55px;
+  }
+  h2 {
+    font-weight: 600;
+    line-height: 1.25em;
+    font-size: 40px;
+  }
+  h3 {
+    font-weight: 600;
+    line-height: 1.4em;
+    font-size: 30px;
+  }
+  h4 {
+    font-weight: 600;
+    line-height: 1.2em;
+    font-size: 28px;
+  }
+  h5 {
+    font-weight: 600;
+    line-height: 1.21em;
+    font-size: 18px;
+  }
+  h6 {
+    font-weight: 600;
+    line-height: 1.2em;
+    letter-spacing: 0.1em;
+    font-size: 13px;
+  }
 }
 
-/* Custom scrollbar for webkit */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

@@ -73,7 +73,7 @@ const LayersPanel = () => {
                                 }
                                 setSelectedObject(obj);
                             }}
-                            className={`group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-indigo-50 border-indigo-100 shadow-sm' : 'bg-transparent border-transparent hover:bg-gray-50'}`}
+                            className={`group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all border ${isSelected ? 'bg-red-50 border-brand-primary shadow-sm' : 'bg-transparent border-transparent hover:bg-gray-50'}`}
                         >
                             {/* Visibility Toggle */}
                             <button
@@ -88,8 +88,8 @@ const LayersPanel = () => {
 
                             {/* Icon & Label */}
                             <div className="flex-1 flex items-center gap-2 overflow-hidden">
-                                <Icon size={14} className={isSelected ? 'text-indigo-600' : 'text-gray-500'} />
-                                <span className={`text-xs font-medium truncate ${isSelected ? 'text-indigo-900' : 'text-gray-700'}`}>
+                                <Icon size={14} className={isSelected ? 'text-brand-primary' : 'text-gray-500'} />
+                                <span className={`text-xs font-medium truncate ${isSelected ? 'text-brand-dark' : 'text-gray-700'}`}>
                                     {getLabel(obj)}
                                 </span>
                             </div>

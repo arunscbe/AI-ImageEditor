@@ -8,8 +8,8 @@ import Button from './ui/Button';
 const fabricDefaults = {
     transparentCorners: false,
     cornerColor: 'white',
-    cornerStrokeColor: '#6366f1',
-    borderColor: '#6366f1',
+    cornerStrokeColor: '#e20b0b',
+    borderColor: '#e20b0b',
     cornerSize: 10,
     cornerStyle: 'square',
 };
@@ -26,14 +26,19 @@ const fabricDefaults = {
     }
 });
 
-const CanvasArea = () => {
+const CanvasArea = ({ projectId }) => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const fabricCanvasRef = useRef(null);
 
-    // Use Store
     const { zoom, setZoom, setCanvas, activeTool, handleCanvasAction, setSelectedObject, updateLayers, selectedObject, deleteObject, getNextPosition, incrementObjectCount, focusObject, toggleLayersPanel, isLayersPanelOpen } = useStore();
     const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        if (projectId) {
+            console.log('Loading project:', projectId);
+        }
+    }, [projectId]);
 
     // Keyboard Shortcuts (Escape, Delete, Backspace)
     useEffect(() => {
@@ -287,7 +292,7 @@ const CanvasArea = () => {
                         variant="ghost"
                         size="icon"
                         onClick={toggleLayersPanel}
-                        className={isLayersPanelOpen ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-700'}
+                        className={isLayersPanelOpen ? 'text-brand-primary' : 'text-gray-500 hover:text-gray-700'}
                     >
                         <Layers size={18} />
                     </Button>
