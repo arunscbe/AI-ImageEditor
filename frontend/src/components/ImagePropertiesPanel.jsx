@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronUp, Plus, ChevronDown } from 'lucide-react';
+import { ChevronUp, Plus, ChevronDown, Palette } from 'lucide-react';
 import useStore from '../store/useStore';
 import { filters as fabricFilters, Shadow } from 'fabric';
+import { extractColorsFromImage, replaceColorInImage } from '../utils/colorExtractor';
 
 const ImagePropertiesPanel = () => {
     const { selectedObject, canvas } = useStore();
     const [isColorOpen, setIsColorOpen] = useState(true);
     const [isEffectsOpen, setIsEffectsOpen] = useState(false);
+    const [isPaletteOpen, setIsPaletteOpen] = useState(true);
+
+    const [extractedColors, setExtractedColors] = useState([]);
+    const [selectedColorIndex, setSelectedColorIndex] = useState(null);
+    const [showColorPicker, setShowColorPicker] = useState(false);
+    const [pickerColor, setPickerColor] = useState('#000000');
+    const [draggedColorIndex, setDraggedColorIndex] = useState(null);
+    const [dropTargetIndex, setDropTargetIndex] = useState(null);
 
     const [activeEffects, setActiveEffects] = useState([]);
     const [openSettingsId, setOpenSettingsId] = useState(null);
@@ -83,6 +92,9 @@ const ImagePropertiesPanel = () => {
                     width: Math.round(selectedObject.getScaledWidth()),
                     height: Math.round(selectedObject.getScaledHeight())
                 });
+
+                const colors = extractColorsFromImage(selectedObject, 8);
+                setExtractedColors(colors);
             };
 
             updateProps();
@@ -206,6 +218,74 @@ const ImagePropertiesPanel = () => {
         }
     };
 
+    const handleColorClick = (color, index) => {
+        setSelectedColorIndex(index);
+        setPickerColor(color.hex);
+        setShowColorPicker(true);
+    };
+
+    const handleColorChange = (newColor) => {
+        if (selectedColorIndex !== null && extractedColors[selectedColorIndex]) {
+            const oldColor = extractedColors[selectedColorIndex].hex;
+            replaceColorInImage(selectedObject, oldColor, newColor, 40);
+            
+            const updatedColors = [...extractedColors];
+            updatedColors[selectedColorIndex] = {
+                ...updatedColors[selectedColorIndex],
+                hex: newColor,
+                rgb: hexToRgbString(newColor)
+            };
+            setExtractedColors(updatedColors);
+            setPickerColor(newColor);
+        }
+    };
+
+    const handleDragStart = (e, index) => {
+        setDraggedColorIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', e.target);
+    };
+
+    const handleDragOver = (e, index) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDropTargetIndex(index);
+    };
+
+    const handleDragLeave = () => {
+        setDropTargetIndex(null);
+    };
+
+    const handleDrop = (e, targetIndex) => {
+        e.preventDefault();
+        
+        if (draggedColorIndex !== null && targetIndex !== draggedColorIndex) {
+            const sourceColor = extractedColors[draggedColorIndex].hex;
+            const targetColor = extractedColors[targetIndex].hex;
+            
+            replaceColorInImage(selectedObject, targetColor, sourceColor, 40);
+            
+            const updatedColors = extractedColors.filter((_, idx) => idx !== targetIndex);
+            setExtractedColors(updatedColors);
+        }
+        
+        setDraggedColorIndex(null);
+        setDropTargetIndex(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedColorIndex(null);
+        setDropTargetIndex(null);
+    };
+
+    const hexToRgbString = (hex) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        if (result) {
+            return `rgb(${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)})`;
+        }
+        return 'rgb(0,0,0)';
+    };
+
     const Slider = ({ label, min, max, value, onChange, step = 1, isHue = false }) => (
         <div className="flex items-center justify-between gap-4">
             <span className="text-sm text-gray-400 font-normal w-24">{label}</span>
@@ -252,7 +332,108 @@ const ImagePropertiesPanel = () => {
                     background: #e5e7eb;
                 }
             `}</style>
-            <div className="absolute top-3 left-6 z-10 w-[300px] bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] p-5 border border-gray-100/50 flex flex-col gap-5 font-sans">
+            <div className="absolute top-3 left-6 z-10 w-[300px] bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] p-5 border border-gray-100/50 flex flex-col gap-5 font-sans max-h-[calc(100vh-100px)] overflow-y-auto">
+                {/* Color Palette Section */}
+                {extractedColors.length > 0 && (
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsPaletteOpen(!isPaletteOpen)}>
+                            <div className="flex items-center gap-2">
+                                <Palette size={18} className="text-brand-primary" />
+                                <span className="text-base font-semibold text-gray-900">Color Palette</span>
+                            </div>
+                            {isPaletteOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                        </div>
+
+                        {isPaletteOpen && (
+                            <div className="flex flex-col gap-3">
+                                <p className="text-xs text-gray-500">Click to edit • Drag to merge colors</p>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {extractedColors.map((color, index) => (
+                                        <button
+                                            key={index}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, index)}
+                                            onDragOver={(e) => handleDragOver(e, index)}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={(e) => handleDrop(e, index)}
+                                            onDragEnd={handleDragEnd}
+                                            onClick={() => handleColorClick(color, index)}
+                                            className={`group relative aspect-square rounded-lg border-2 transition-all hover:scale-105 cursor-move ${
+                                                selectedColorIndex === index 
+                                                    ? 'border-brand-primary ring-2 ring-brand-primary/20' 
+                                                    : draggedColorIndex === index
+                                                    ? 'border-gray-400 opacity-50 scale-95'
+                                                    : dropTargetIndex === index
+                                                    ? 'border-brand-primary ring-4 ring-brand-primary/30 scale-110'
+                                                    : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                            style={{ backgroundColor: color.hex }}
+                                            title={`${color.hex} - Drag to merge`}
+                                        >
+                                            <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                                {selectedColorIndex === index && (
+                                                    <div className="w-2 h-2 rounded-full bg-white shadow-lg"></div>
+                                                )}
+                                                {dropTargetIndex === index && draggedColorIndex !== null && draggedColorIndex !== index && (
+                                                    <div className="text-white font-bold text-xs bg-brand-primary rounded-full w-5 h-5 flex items-center justify-center">
+                                                        ↓
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                                
+                                {showColorPicker && selectedColorIndex !== null && (
+                                    <div className="flex flex-col gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium text-gray-700">Replace Color</span>
+                                            <button
+                                                onClick={() => {
+                                                    setShowColorPicker(false);
+                                                    setSelectedColorIndex(null);
+                                                }}
+                                                className="text-xs text-gray-500 hover:text-gray-700"
+                                            >
+                                                Done
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div
+                                                className="w-10 h-10 rounded-lg border-2 border-gray-300"
+                                                style={{ backgroundColor: extractedColors[selectedColorIndex].hex }}
+                                            />
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-gray-400">
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                <polyline points="12 5 19 12 12 19"></polyline>
+                                            </svg>
+                                            <input
+                                                type="color"
+                                                value={pickerColor}
+                                                onChange={(e) => handleColorChange(e.target.value)}
+                                                className="w-10 h-10 rounded-lg border-2 border-brand-primary cursor-pointer"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={pickerColor}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setPickerColor(value);
+                                                    if (/^#[0-9A-F]{6}$/i.test(value)) {
+                                                        handleColorChange(value);
+                                                    }
+                                                }}
+                                                className="flex-1 px-2 py-1 text-xs font-mono border border-gray-200 rounded focus:outline-none focus:border-brand-primary"
+                                                placeholder="#000000"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Color section */}
                 <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsColorOpen(!isColorOpen)}>
