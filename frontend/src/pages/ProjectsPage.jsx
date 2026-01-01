@@ -12,7 +12,7 @@ const ProjectsPage = () => {
 
   const createNewProject = () => {
     const newId = Date.now().toString();
-    navigate(`/project/${newId}`);
+    navigate(`/project/${newId}/intent`);
   };
 
   return (

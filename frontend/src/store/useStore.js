@@ -12,6 +12,18 @@ const useStore = create((set, get) => ({
   canvas: null,
   setCanvas: (canvas) => set({ canvas }),
 
+  // Processing State
+  isProcessing: false,
+  processingMessage: '',
+  setProcessing: (isProcessing, message = '') => 
+    set({ isProcessing, processingMessage: message }),
+
+  // Project Intent State
+  projectIntent: null,
+  setProjectIntent: (intent) => set({ projectIntent: intent }),
+  suggestedPrompts: [],
+  setSuggestedPrompts: (prompts) => set({ suggestedPrompts: prompts }),
+
   // Zoom State
   zoom: 100,
   setZoom: (zoom) => set({ zoom }),
@@ -264,13 +276,14 @@ const useStore = create((set, get) => ({
     }
   },
   vectorizeAPI: async () => {
-    // const fabric = window.fabric; // Removed to use imported fabric
-    const { canvas, selectedObject, updateLayers } = get();
+    const { canvas, selectedObject, updateLayers, setProcessing } = get();
 
     if (!selectedObject || selectedObject.type !== "image") {
       alert("Please select an image first.");
       return;
     }
+
+    setProcessing(true, "Vectorizing image...");
 
     try {
       const placement = {
@@ -329,11 +342,13 @@ const useStore = create((set, get) => ({
     } catch (error) {
       console.error("Vectorize error:", error);
       alert(`Error: ${error.message}`);
+    } finally {
+      setProcessing(false);
     }
   },
 
   forRemovingBG: async () => {
-    const { canvas, selectedObject, focusObject, incrementObjectCount } = get();
+    const { canvas, selectedObject, focusObject, incrementObjectCount, setProcessing } = get();
     console.log(selectedObject);
     const placement = {
       scaleX: selectedObject.scaleX,
@@ -346,6 +361,8 @@ const useStore = create((set, get) => ({
       alert("Please select an image first.");
       return;
     }
+
+    setProcessing(true, "Removing background...");
 
     try {
       // Convert fabric image to PNG blob
@@ -414,6 +431,8 @@ const useStore = create((set, get) => ({
     } catch (error) {
       console.error("Error removing BG:", error);
       alert(`Error removing BG: ${error.message}`);
+    } finally {
+      setProcessing(false);
     }
   },
 
@@ -551,6 +570,7 @@ const useStore = create((set, get) => ({
       getNextPosition,
       focusObject,
       incrementObjectCount,
+      setProcessing,
     } = get();
     if (!canvas) {
       console.error("Canvas not initialized");
@@ -561,6 +581,8 @@ const useStore = create((set, get) => ({
       console.error("No image URL provided");
       return;
     }
+
+    setProcessing(true, "Loading AI generated image...");
 
     try {
       // If an image object is selected → replace its image
@@ -626,6 +648,8 @@ const useStore = create((set, get) => ({
     } catch (error) {
       console.error("Error loading image:", error);
       console.error("Image URL:", url);
+    } finally {
+      setProcessing(false);
     }
   },
 }));
