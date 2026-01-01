@@ -9,19 +9,23 @@ import {
     Upload,
     Palette
 } from 'lucide-react';
+import useFeatureFlagStore from '../features/useFeatureFlag';
+import { FEATURES } from '../features/featureFlags';
 
 const Sidebar = () => {
-    // Use Store
     const { activeTool, setActiveTool, handleCanvasAction } = useStore();
+    const { isEnabled } = useFeatureFlagStore();
 
-    const tools = [
-        { icon: ImageIcon, label: 'Image', id: 'image' },
-        // { icon: Frame, label: 'Frame', id: 'frame' },
-        // { icon: Layers, label: 'Image set', id: 'imageset' },
-        // { icon: Monitor, label: 'Mockup', id: 'mockup' },
-        { icon: Upload, label: 'Upload Image', id: 'upload' },
-        // { icon: Palette, label: 'Style', id: 'style' },
+    const allTools = [
+        { icon: ImageIcon, label: 'Image', id: 'image', feature: FEATURES.AI_IMAGE_GENERATION },
+        { icon: Upload, label: 'Upload Image', id: 'upload', feature: FEATURES.UPLOAD_IMAGE },
     ];
+
+    const tools = allTools.filter(tool => isEnabled(tool.feature));
+
+    if (tools.length === 0) {
+        return null;
+    }
 
     return (
         <div className="absolute top-3 left-6 z-10 w-[240px] bg-white rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] p-4 border border-gray-100/50">

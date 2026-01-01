@@ -3,3 +3,5 @@ uvicorn
 python-dotenv
 ipykernel
 notebook
+python-multipart
+pillow
