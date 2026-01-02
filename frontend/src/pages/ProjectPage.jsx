@@ -2,13 +2,10 @@ import React, { useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import TopNav from '../components/TopNav';
-import Sidebar from '../components/Sidebar';
+import ToolPalette from '../components/ToolPalette';
+import RightPanel from '../components/RightPanel';
 import CanvasArea from '../components/CanvasArea';
-import TextPropertiesPanel from '../components/TextPropertiesPanel';
-import ImagePropertiesPanel from '../components/ImagePropertiesPanel';
-import ShapePropertiesPanel from '../components/ShapePropertiesPanel';
 import AIChatPanel from '../components/AIChatPanel';
-import LayersPanel from '../components/LayersPanel';
 import EmptyStateGuidance from '../components/EmptyStateGuidance';
 import ProcessingOverlay from '../components/ProcessingOverlay';
 import Button from '../components/ui/Button';
@@ -20,7 +17,14 @@ const ProjectPage = () => {
   const { uuid } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { selectedObject, setProjectIntent, setSuggestedPrompts, canvas } = useStore();
+  const { 
+    selectedObject, 
+    setProjectIntent, 
+    setSuggestedPrompts, 
+    canvas,
+    setExportDialogOpen,
+    handleDuplicate
+  } = useStore();
   const { isEnabled } = useFeatureFlagStore();
 
   console.log('ProjectPage loaded');
@@ -45,9 +49,46 @@ const ProjectPage = () => {
     }
   }, [location.state, setProjectIntent, setSuggestedPrompts]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault();
+        if (selectedObject) {
+          setExportDialogOpen(true);
+        } else {
+          alert('Please select an object to export');
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        if (selectedObject) {
+          handleDuplicate();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedObject, setExportDialogOpen, handleDuplicate]);
+
   const isTextSelected = selectedObject?.type === 'i-text';
   const isImageSelected = selectedObject?.type === 'image';
   const isShapeSelected = ['rect', 'circle', 'line', 'path', 'polygon', 'polyline', 'triangle', 'group'].includes(selectedObject?.type);
+  
+  // Show image properties panel for images, groups (SVG), and shapes with colors
+  const showImagePropertiesPanel = isImageSelected || isShapeSelected;
+  
+  console.log('Selected object:', selectedObject);
+  console.log('Selected object type:', selectedObject?.type);
+  console.log('isImageSelected:', isImageSelected);
+  console.log('isShapeSelected:', isShapeSelected);
+  console.log('showImagePropertiesPanel:', showImagePropertiesPanel);
+  console.log('IMAGE_PROPERTIES feature enabled:', isEnabled(FEATURES.IMAGE_PROPERTIES));
 
   const hasCanvasObjects = canvas?.getObjects().length > 0;
 
@@ -68,13 +109,8 @@ const ProjectPage = () => {
           Back to Projects
         </Button>
 
-        {!isTextSelected && !isImageSelected && !isShapeSelected && <Sidebar />}
-
-        {isTextSelected && isEnabled(FEATURES.TEXT_PROPERTIES) && <TextPropertiesPanel />}
-        {isImageSelected && isEnabled(FEATURES.IMAGE_PROPERTIES) && <ImagePropertiesPanel />}
-        {isShapeSelected && isEnabled(FEATURES.SHAPE_PROPERTIES) && <ShapePropertiesPanel />}
-
-        {isEnabled(FEATURES.LAYERS_PANEL) && <LayersPanel />}
+        <ToolPalette />
+        <RightPanel />
 
         {isEnabled(FEATURES.AI_IMAGE_GENERATION) && <AIChatPanel />}
 

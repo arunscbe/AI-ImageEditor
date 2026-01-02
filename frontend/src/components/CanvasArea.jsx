@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Canvas, Rect, FabricObject, InteractiveFabricObject, IText, PencilBrush, FabricImage } from 'fabric';
+import * as fabric from 'fabric';
 import { Minus, Plus, Undo2, Layers, Upload } from 'lucide-react';
 import useStore from '../store/useStore';
 import Button from './ui/Button';
@@ -30,9 +31,15 @@ const CanvasArea = ({ projectId }) => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const fabricCanvasRef = useRef(null);
+    const activeToolRef = useRef(null);
 
-    const { zoom, setZoom, setCanvas, activeTool, handleCanvasAction, setSelectedObject, updateLayers, selectedObject, deleteObject, getNextPosition, incrementObjectCount, focusObject, toggleLayersPanel, isLayersPanelOpen } = useStore();
+    const { zoom, setZoom, setCanvas, activeTool, handleCanvasAction, setSelectedObject, updateLayers, selectedObject, deleteObject, getNextPosition, incrementObjectCount, focusObject, toggleLayersPanel, isLayersPanelOpen, brushSize, brushColor } = useStore();
     const fileInputRef = useRef(null);
+
+    // Keep activeToolRef in sync with activeTool
+    useEffect(() => {
+        activeToolRef.current = activeTool;
+    }, [activeTool]);
 
     useEffect(() => {
         if (projectId) {
@@ -95,19 +102,22 @@ const CanvasArea = ({ projectId }) => {
             }
         });
 
-        // Middle-click Panning
         let isPanning = false;
         let lastPosX;
         let lastPosY;
 
         canvas.on('mouse:down', function (opt) {
-            // Check button: 1 is middle, 0 is left, 2 is right
-            if (opt.e.button === 1) {
+            // Middle-click always pans, left-click only pans when pan tool is active
+            const isMiddleClick = opt.e.button === 1;
+            const isLeftClickWithPanTool = opt.e.button === 0 && activeToolRef.current === 'pan';
+            
+            if (isMiddleClick || isLeftClickWithPanTool) {
                 isPanning = true;
                 canvas.selection = false;
                 lastPosX = opt.e.clientX;
                 lastPosY = opt.e.clientY;
                 canvas.defaultCursor = 'grabbing';
+                opt.e.preventDefault();
             }
         });
 
@@ -120,6 +130,7 @@ const CanvasArea = ({ projectId }) => {
                 canvas.setViewportTransform(vpt);
                 lastPosX = e.clientX;
                 lastPosY = e.clientY;
+                canvas.requestRenderAll();
             }
         });
 
@@ -127,7 +138,7 @@ const CanvasArea = ({ projectId }) => {
             if (isPanning) {
                 isPanning = false;
                 canvas.selection = true;
-                canvas.defaultCursor = 'default';
+                canvas.defaultCursor = activeToolRef.current === 'pan' ? 'grab' : 'default';
                 canvas.requestRenderAll();
             }
         });
@@ -177,69 +188,130 @@ const CanvasArea = ({ projectId }) => {
         }
     }, [setZoom, setCanvas]);
 
-    // Update Brush Mode
     useEffect(() => {
         const canvas = fabricCanvasRef.current;
         if (!canvas) return;
 
-        if (activeTool === 'brush') {
+        if (activeTool === 'brush' || activeTool === 'eraser') {
             canvas.isDrawingMode = true;
 
-            // Ensure brush is instantiated
             if (!canvas.freeDrawingBrush) {
                 canvas.freeDrawingBrush = new PencilBrush(canvas);
             }
 
-            // Configure brush
-            canvas.freeDrawingBrush.width = 4;
-            canvas.freeDrawingBrush.color = '#111111ff';
+            canvas.freeDrawingBrush.width = brushSize;
+            canvas.freeDrawingBrush.color = activeTool === 'eraser' ? '#ffffff' : brushColor;
         } else if (activeTool === 'upload') {
             fileInputRef.current?.click();
             handleCanvasAction('CANCEL_TOOL');
+        } else if (activeTool === 'pan') {
+            canvas.isDrawingMode = false;
+            canvas.selection = false;
+            canvas.defaultCursor = 'grab';
+            canvas.hoverCursor = 'grab';
+            canvas.forEachObject(obj => {
+                obj.selectable = false;
+                obj.evented = false;
+            });
         } else {
             canvas.isDrawingMode = false;
+            canvas.selection = true;
+            canvas.defaultCursor = 'default';
+            canvas.hoverCursor = 'move';
+            canvas.forEachObject(obj => {
+                obj.selectable = true;
+                obj.evented = true;
+            });
         }
-    }, [activeTool, handleCanvasAction]);
+    }, [activeTool, handleCanvasAction, brushSize, brushColor]);
 
     // Handle File Upload
     const handleFileUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = async (f) => {
-            const data = f.target.result;
-            const img = await FabricImage.fromURL(data);
+        const fileName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+        const isSVG = file.type === 'image/svg+xml' || file.name.endsWith('.svg');
 
-            const canvas = fabricCanvasRef.current;
-            if (canvas) {
-                // Resize to max 512px
-                const maxSize = 512;
-                if (img.width > maxSize || img.height > maxSize) {
-                    if (img.width > img.height) {
-                        img.scaleToWidth(maxSize);
-                    } else {
-                        img.scaleToHeight(maxSize);
+        if (isSVG) {
+            const reader = new FileReader();
+            reader.onload = async (f) => {
+                const svgText = f.target.result;
+                
+                try {
+                    const { objects, options } = await fabric.loadSVGFromString(svgText);
+                    const svg = fabric.util.groupSVGElements(objects, options);
+
+                    const canvas = fabricCanvasRef.current;
+                    if (canvas) {
+                        const maxSize = 512;
+                        const svgWidth = svg.width || 100;
+                        const svgHeight = svg.height || 100;
+                        
+                        if (svgWidth > maxSize || svgHeight > maxSize) {
+                            const scale = Math.min(maxSize / svgWidth, maxSize / svgHeight);
+                            svg.scale(scale);
+                        }
+
+                        const pos = getNextPosition();
+                        svg.set({
+                            left: pos.left,
+                            top: pos.top,
+                            originX: 'left',
+                            originY: 'center',
+                            name: fileName, // Store filename
+                        });
+
+                        canvas.add(svg);
+                        incrementObjectCount();
+                        canvas.setActiveObject(svg);
+                        focusObject(svg);
+                        canvas.renderAll();
+                        updateLayers();
                     }
+                } catch (error) {
+                    console.error('SVG load error:', error);
+                    alert('Failed to load SVG file. Please ensure it\'s a valid SVG.');
                 }
+            };
+            reader.readAsText(file);
+        } else {
+            const reader = new FileReader();
+            reader.onload = async (f) => {
+                const data = f.target.result;
+                const img = await FabricImage.fromURL(data);
 
-                const pos = getNextPosition();
-                img.set({
-                    left: pos.left,
-                    top: pos.top,
-                    originX: 'left',
-                    originY: 'center',
-                });
+                const canvas = fabricCanvasRef.current;
+                if (canvas) {
+                    const maxSize = 512;
+                    if (img.width > maxSize || img.height > maxSize) {
+                        if (img.width > img.height) {
+                            img.scaleToWidth(maxSize);
+                        } else {
+                            img.scaleToHeight(maxSize);
+                        }
+                    }
 
-                canvas.add(img);
-                incrementObjectCount();
-                canvas.setActiveObject(img);
-                focusObject(img);
-                canvas.renderAll();
-            }
-        };
-        reader.readAsDataURL(file);
-        // Reset input
+                    const pos = getNextPosition();
+                    img.set({
+                        left: pos.left,
+                        top: pos.top,
+                        originX: 'left',
+                        originY: 'center',
+                        name: fileName, // Store filename
+                    });
+
+                    canvas.add(img);
+                    incrementObjectCount();
+                    canvas.setActiveObject(img);
+                    focusObject(img);
+                    canvas.renderAll();
+                    updateLayers();
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+        
         e.target.value = '';
     };
 

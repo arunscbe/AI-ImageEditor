@@ -15,7 +15,7 @@ const useStore = create((set, get) => ({
   // Processing State
   isProcessing: false,
   processingMessage: '',
-  setProcessing: (isProcessing, message = '') => 
+  setProcessing: (isProcessing, message = '') =>
     set({ isProcessing, processingMessage: message }),
 
   // Project Intent State
@@ -40,8 +40,26 @@ const useStore = create((set, get) => ({
     set((state) => ({ isLayersPanelOpen: !state.isLayersPanelOpen })),
 
   // Sidebar State
-  activeTool: null, // 'image', 'frame', etc.
+  activeTool: null, // 'image', 'frame', 'brush', 'eraser', etc.
   setActiveTool: (tool) => set({ activeTool: tool }),
+
+  // Brush State
+  brushSize: 4,
+  setBrushSize: (size) => {
+    const { canvas } = get();
+    set({ brushSize: size });
+    if (canvas && canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush.width = size;
+    }
+  },
+  brushColor: '#000000',
+  setBrushColor: (color) => {
+    const { canvas } = get();
+    set({ brushColor: color });
+    if (canvas && canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush.color = color;
+    }
+  },
 
   // Selection State
   selectedObject: null,
@@ -436,6 +454,89 @@ const useStore = create((set, get) => ({
     }
   },
 
+  upscaleImage: async () => {
+    const { canvas, selectedObject, incrementObjectCount, setProcessing } = get();
+
+    if (!selectedObject || selectedObject.type !== "image") {
+      alert("Please select an image first.");
+      return;
+    }
+
+    setProcessing(true, "Upscaling image...");
+
+    try {
+      const dataURL = selectedObject.toDataURL({
+        format: "png",
+        quality: 1,
+      });
+
+      const blob = await (await fetch(dataURL)).blob();
+
+      const formData = new FormData();
+      formData.append("image", blob, "upscale.png");
+
+      const response = await fetch("http://127.0.0.1:8000/upscale", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Upscale Response:", data);
+
+      const upscaledUrl = data?.image?.url;
+      if (!upscaledUrl) {
+        alert("Image upscaling failed.");
+        return;
+      }
+
+      const img = await fabric.FabricImage.fromURL(upscaledUrl, {
+        crossOrigin: "anonymous",
+      });
+
+      if (!img) {
+        console.error("Failed to load upscaled image from URL:", upscaledUrl);
+        return;
+      }
+
+      const prevW = selectedObject.getScaledWidth();
+      const prevH = selectedObject.getScaledHeight();
+
+      const newW = img.width;
+      const newH = img.height;
+
+      const scaleX = prevW / newW;
+      const scaleY = prevH / newH;
+
+      img.set({
+        left: selectedObject.left,
+        top: selectedObject.top,
+        angle: selectedObject.angle,
+        flipX: selectedObject.flipX,
+        flipY: selectedObject.flipY,
+        originX: selectedObject.originX,
+        originY: selectedObject.originY,
+        scaleX,
+        scaleY,
+      });
+
+      canvas.remove(selectedObject);
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      incrementObjectCount();
+      canvas.renderAll();
+      get().updateLayers();
+    } catch (error) {
+      console.error("Error upscaling image:", error);
+      alert(`Error upscaling image: ${error.message}`);
+    } finally {
+      setProcessing(false);
+    }
+  },
+
   /*forRemovingBG: async () => {
     alert("sdsdsdsd");
     try {
@@ -459,6 +560,8 @@ const useStore = create((set, get) => ({
   },*/
   handleCanvasAction: (type, payload = null) => {
     const store = get();
+    const canvas = store.canvas;
+
     switch (type) {
       case "ADD_TEXT":
         store.addText();
@@ -479,9 +582,37 @@ const useStore = create((set, get) => ({
         store.addArrow();
         break;
       case "TOGGLE_BRUSH":
+        if (canvas) {
+          canvas.isDrawingMode = true;
+
+          if (!canvas.freeDrawingBrush) {
+            canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+          }
+
+          const { brushSize, brushColor } = get();
+          canvas.freeDrawingBrush.width = brushSize;
+          canvas.freeDrawingBrush.color = brushColor;
+        }
         set({ activeTool: "brush" });
         break;
+      case "TOGGLE_ERASER":
+        if (canvas) {
+          canvas.isDrawingMode = true;
+
+          if (!canvas.freeDrawingBrush) {
+            canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+          }
+
+          const { brushSize: eraserSize } = get();
+          canvas.freeDrawingBrush.width = eraserSize;
+          canvas.freeDrawingBrush.color = '#ffffff';
+        }
+        set({ activeTool: "eraser" });
+        break;
       case "CANCEL_TOOL":
+        if (canvas) {
+          canvas.isDrawingMode = false;
+        }
         set({ activeTool: null });
         break;
       case "UPLOAD_IMAGE":
@@ -492,6 +623,126 @@ const useStore = create((set, get) => ({
         break;
     }
     set({ isInsertOpen: false });
+  },
+
+  isExportDialogOpen: false,
+  setExportDialogOpen: (isOpen) => set({ isExportDialogOpen: isOpen }),
+
+  handleDuplicate: async () => {
+    const canvas = get().canvas;
+    const activeObject = canvas.getActiveObject();
+
+    if (activeObject) {
+      try {
+        const clonedObj = await activeObject.clone();
+
+        // Get the bounding box to calculate proper offset
+        const boundingRect = activeObject.getBoundingRect();
+        const offsetX = boundingRect.width + 20;
+
+        clonedObj.set({
+          left: activeObject.left + offsetX,
+          top: activeObject.top,
+          evented: true,
+          selectable: true,
+        });
+
+        canvas.add(clonedObj);
+        canvas.setActiveObject(clonedObj);
+        canvas.requestRenderAll();
+
+        // Focus and center cloned obj
+        const clonedBoundingRect = clonedObj.getBoundingRect();
+        const canvasCenter = canvas.getCenter();
+        const viewportTransform = canvas.viewportTransform;
+        
+        // Calculate the center point of the cloned object
+        const objCenterX = clonedBoundingRect.left + clonedBoundingRect.width / 2;
+        const objCenterY = clonedBoundingRect.top + clonedBoundingRect.height / 2;
+        
+        // Pan the canvas to center the object
+        const panX = canvasCenter.left - objCenterX;
+        const panY = canvasCenter.top - objCenterY;
+        
+        canvas.relativePan({ x: panX, y: panY });
+        canvas.requestRenderAll();
+
+        get().updateLayers();
+
+        console.log('Object duplicated successfully');
+      } catch (error) {
+        console.error('Error duplicating object:', error);
+        alert('Unable to duplicate this object');
+      }
+    } else {
+      console.log("No object is currently selected.");
+    }
+  },
+
+  handleExport: (options = {}) => {
+    const canvas = get().canvas;
+    if (!canvas) {
+      console.error('Canvas not initialized');
+      return;
+    }
+
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject) {
+      console.warn('No object selected to export');
+      alert('Please select an object to export');
+      return;
+    }
+
+    const {
+      format = 'png',
+      quality = 1,
+      scale = 2,
+    } = options;
+
+    try {
+      const originalLeft = activeObject.left;
+      const originalTop = activeObject.top;
+
+      activeObject.set({
+        left: activeObject.width / 2,
+        top: activeObject.height / 2,
+      });
+      activeObject.setCoords();
+
+      const exportOptions = {
+        format: format === 'jpg' ? 'jpeg' : format,
+        quality: quality,
+        multiplier: scale,
+        enableRetinaScaling: true,
+      };
+
+      if (format === 'jpg') {
+        exportOptions.backgroundColor = '#FFFFFF';
+      }
+
+      const dataURL = activeObject.toDataURL(exportOptions);
+
+      activeObject.set({
+        left: originalLeft,
+        top: originalTop,
+      });
+      activeObject.setCoords();
+      canvas.renderAll();
+
+      const link = document.createElement('a');
+      const objectName = activeObject.name || activeObject.type || 'object';
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      link.download = `${objectName}-${timestamp}.${format}`;
+      link.href = dataURL;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log('Object exported successfully:', link.download);
+    } catch (error) {
+      console.error('Error exporting object:', error);
+      alert('Failed to export object. Please try again.');
+    }
   },
 
   // Layer Management

@@ -5,14 +5,13 @@ import useStore from "../store/useStore";
 const AIChatPanel = () => {
   const [prompt, setPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { selectedObject, canvas, addAIImage, suggestedPrompts, setProcessing } = useStore();
+  const { selectedObject, canvas, addAIImage } = useStore();
   const isImageSelected = selectedObject?.type === "image";
   const handleSubmit = async () => {
     if (!prompt.trim() || isLoading) return;
 
     console.log("AI Prompt:", prompt);
     setIsLoading(true);
-    setProcessing(true, "Generating AI image...");
 
     try {
       const response = await fetch("http://127.0.0.1:8000/generate-image", {
@@ -54,9 +53,6 @@ const AIChatPanel = () => {
     } catch (error) {
       console.error("Error generating image:", error);
       alert(`Error generating image: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-      setProcessing(false);
     }
   };
 
@@ -70,32 +66,12 @@ const AIChatPanel = () => {
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-20 w-[calc(100%-48px)] max-w-4xl">
       <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-gray-200 p-4">
-        {/* Suggested Prompts */}
-        {suggestedPrompts.length > 0 && !prompt && (
-          <div className="mb-4 pb-4 border-b border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Suggested Prompts
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {suggestedPrompts.map((suggested, index) => (
-                <button
-                  key={index}
-                  onClick={() => setPrompt(suggested)}
-                  className="text-xs px-3 py-1.5 bg-gray-50 hover:bg-brand-primary hover:text-white border border-gray-200 hover:border-brand-primary rounded-full transition-all"
-                >
-                  {suggested}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Selected Image Indicator */}
         {isImageSelected && (
           <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
             <div className="relative group">
               {/* Image Thumbnail */}
-              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-brand-primary shadow-sm">
+              <div className="w-16 h-16 rounded-lg overflow-hidden border-2 border-indigo-200 shadow-sm">
                 <img
                   src={selectedObject.getSrc()}
                   alt="Selected"
@@ -144,7 +120,7 @@ const AIChatPanel = () => {
               disabled={!prompt.trim() || isLoading}
               className={`p-2.5 rounded-lg transition-all ${
                 prompt.trim() && !isLoading
-                  ? "bg-brand-primary text-white hover:bg-brand-accent shadow-md hover:shadow-lg"
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
                   : "bg-gray-100 text-gray-300 cursor-not-allowed"
               }`}
             >

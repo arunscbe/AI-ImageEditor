@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from generateImage import router as generateImage_router
 from removeBG import router as removeBG_router
 from vectorizeImage import router as vectorize_router
+from upscaleImage import router as upscale_router
 from test import testinApp
 
 app = FastAPI()
@@ -20,6 +21,7 @@ app.add_middleware(
 app.include_router(generateImage_router)
 app.include_router(removeBG_router)
 app.include_router(vectorize_router)
+app.include_router(upscale_router)
 @app.get("/test")
 def test_route():
     return testinApp()
