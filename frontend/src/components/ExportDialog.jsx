@@ -12,7 +12,7 @@ const ExportDialog = ({ isOpen, onClose, onExport, objectName = 'object' }) => {
   const formats = [
     { value: 'png', label: 'PNG', icon: FileImage, description: 'Best for transparency' },
     { value: 'jpg', label: 'JPG', icon: FileImage, description: 'Smaller file size' },
-    { value: 'svg', label: 'SVG', icon: FileType, description: 'Vector format (shapes only)', disabled: true },
+    { value: 'svg', label: 'SVG', icon: FileType, description: 'Vector format' },
     { value: 'webp', label: 'WebP', icon: FileImage, description: 'Modern web format' },
   ];
 
@@ -176,4 +176,5 @@ const ExportDialog = ({ isOpen, onClose, onExport, objectName = 'object' }) => {
 };
 
 export default ExportDialog;
+
 

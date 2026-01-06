@@ -6,6 +6,7 @@ import {
   Palette,
   Sliders,
   Sparkles,
+  Eraser,
 } from "lucide-react";
 import useStore from "../store/useStore";
 import { filters as fabricFilters, Shadow } from "fabric";
@@ -13,12 +14,14 @@ import {
   extractColorsFromImage,
   replaceColorInImage,
 } from "../utils/colorExtractor";
+import EnhancedEraseRegionTool from "./EnhancedEraseRegionTool";
 
 const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
   const { selectedObject, canvas } = useStore();
   const [isColorOpen, setIsColorOpen] = useState(true);
   const [isEffectsOpen, setIsEffectsOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
+  const [isEraseRegionOpen, setIsEraseRegionOpen] = useState(false);
 
   const [extractedColors, setExtractedColors] = useState([]);
   const [selectedColorIndex, setSelectedColorIndex] = useState(null);
@@ -777,6 +780,36 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {isRasterImage && (
+        <div className="border-b border-gray-200">
+          <button
+            onClick={() => setIsEraseRegionOpen(!isEraseRegionOpen)}
+            className="w-full px-2.5 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors duration-150 group"
+          >
+            <div className="flex items-center gap-1.5">
+              <Eraser size={14} className="text-brand-primary" />
+              <span className="font-semibold text-gray-900 text-xs font-heading">
+                Edit area
+              </span>
+            </div>
+            <ChevronDown
+              size={14}
+              className={`text-gray-400 transition-transform duration-150 ${
+                isEraseRegionOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          <div
+            className={`overflow-hidden transition-all duration-200 ease-in-out ${
+              isEraseRegionOpen ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+            <EnhancedEraseRegionTool />
+          </div>
         </div>
       )}
     </>

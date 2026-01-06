@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import * as fabric from "fabric";
+import { getApiUrl } from "../config/api";
 
 // Extract classes the correct way:
 const { IText, Rect, Circle, Line, Triangle, Group } = fabric;
@@ -272,7 +273,7 @@ const useStore = create((set, get) => ({
   // Function to send test request to backend
   sendTestRequest: async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/test", {
+      const response = await fetch(getApiUrl("/test"), {
         method: "GET", // or "POST" if you prefer
         headers: {
           "Content-Type": "application/json",
@@ -323,7 +324,7 @@ const useStore = create((set, get) => ({
       const formData = new FormData();
       formData.append("image", blob, "vector.png");
 
-      const response = await fetch("http://127.0.0.1:8000/vectorizeImage", {
+      const response = await fetch(getApiUrl("/vectorizeImage"), {
         method: "POST",
         body: formData,
       });
@@ -395,7 +396,7 @@ const useStore = create((set, get) => ({
       const formData = new FormData();
       formData.append("image", blob, "selected.png");
 
-      const response = await fetch("http://127.0.0.1:8000/removebg", {
+      const response = await fetch(getApiUrl("/removebg"), {
         method: "POST",
         body: formData,
       });
@@ -475,7 +476,7 @@ const useStore = create((set, get) => ({
       const formData = new FormData();
       formData.append("image", blob, "upscale.png");
 
-      const response = await fetch("http://127.0.0.1:8000/upscale", {
+      const response = await fetch(getApiUrl("/upscale"), {
         method: "POST",
         body: formData,
       });
@@ -537,10 +538,124 @@ const useStore = create((set, get) => ({
     }
   },
 
+  eraseRegion: async (maskDataURL) => {
+    const { canvas, selectedObject, incrementObjectCount, setProcessing } = get();
+
+    if (!selectedObject || selectedObject.type !== "image") {
+      alert("Please select an image first.");
+      return;
+    }
+
+    setProcessing(true, "Erasing region...");
+
+    try {
+      const imgElement = selectedObject.getElement();
+      const naturalWidth = imgElement.naturalWidth || imgElement.width;
+      const naturalHeight = imgElement.naturalHeight || imgElement.height;
+      
+      console.log('Image dimensions:', {
+        natural: `${naturalWidth}x${naturalHeight}`,
+        scaled: `${selectedObject.getScaledWidth()}x${selectedObject.getScaledHeight()}`
+      });
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = naturalWidth;
+      tempCanvas.height = naturalHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      tempCtx.drawImage(imgElement, 0, 0, naturalWidth, naturalHeight);
+      
+      const imageDataURL = tempCanvas.toDataURL('image/png');
+
+      const imageBlob = await (await fetch(imageDataURL)).blob();
+      const maskBlob = await (await fetch(maskDataURL)).blob();
+
+      console.log('Sending to API:', {
+        imageSize: `${imageBlob.size} bytes`,
+        maskSize: `${maskBlob.size} bytes`,
+        imageType: imageBlob.type,
+        maskType: maskBlob.type
+      });
+
+      const formData = new FormData();
+      formData.append("image", imageBlob, "image.png");
+      formData.append("mask", maskBlob, "mask.png");
+
+      const response = await fetch(getApiUrl("/erase-region"), {
+        method: "POST",
+        body: formData,
+      });
+
+      console.log('API Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log("Erase Region Response:", data);
+
+      const erasedUrl = data?.image?.url;
+      if (!erasedUrl) {
+        alert("Image erase region failed.");
+        return;
+      }
+
+      const img = await fabric.FabricImage.fromURL(erasedUrl, {
+        crossOrigin: "anonymous",
+      });
+
+      if (!img) {
+        console.error("Failed to load erased image from URL:", erasedUrl);
+        return;
+      }
+
+      const prevW = selectedObject.getScaledWidth();
+      const prevH = selectedObject.getScaledHeight();
+
+      const newW = img.width;
+      const newH = img.height;
+
+      const scaleX = prevW / newW;
+      const scaleY = prevH / newH;
+
+      img.set({
+        left: selectedObject.left,
+        top: selectedObject.top,
+        angle: selectedObject.angle,
+        flipX: selectedObject.flipX,
+        flipY: selectedObject.flipY,
+        originX: selectedObject.originX,
+        originY: selectedObject.originY,
+        scaleX,
+        scaleY,
+      });
+
+      canvas.remove(selectedObject);
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      incrementObjectCount();
+      canvas.renderAll();
+      get().updateLayers();
+    } catch (error) {
+      console.error("Error erasing region:", error);
+      alert(`Error erasing region: ${error.message}`);
+    } finally {
+      setProcessing(false);
+    }
+  },
+
+  maskDrawingMode: false,
+  maskCanvas: null,
+  setMaskDrawingMode: (mode) => set({ maskDrawingMode: mode }),
+  setMaskCanvas: (canvas) => set({ maskCanvas: canvas }),
+
   /*forRemovingBG: async () => {
     alert("sdsdsdsd");
     try {
-      const response = await fetch("http://127.0.0.1:8000/removebg", {
+      const response = await fetch(getApiUrl("/removebg"), {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -836,42 +951,8 @@ const useStore = create((set, get) => ({
     setProcessing(true, "Loading AI generated image...");
 
     try {
-      // If an image object is selected → replace its image
-      if (selectedObject && selectedObject.type === "image") {
-        try {
-          const img = await fabric.FabricImage.fromURL(url, {
-            crossOrigin: "anonymous",
-          });
-          if (img) {
-            // Get the current position and size of the selected image
-            const currentLeft = selectedObject.left;
-            const currentTop = selectedObject.top;
-            const currentScaleX = selectedObject.scaleX;
-            const currentScaleY = selectedObject.scaleY;
-
-            // Replace the image source
-            selectedObject.setSrc(url, () => {
-              // Restore position and scale
-              selectedObject.set({
-                left: currentLeft,
-                top: currentTop,
-                scaleX: currentScaleX,
-                scaleY: currentScaleY,
-              });
-              canvas.renderAll();
-              get().updateLayers();
-            });
-          }
-        } catch (error) {
-          console.error("Error replacing image:", error);
-          // Fall through to create new image instead
-        }
-        return;
-      }
-
-      // Otherwise → create a new image
       const img = await fabric.FabricImage.fromURL(url, {
-        crossOrigin: "anonymous", // Handle CORS for external images
+        crossOrigin: "anonymous",
       });
 
       if (!img) {

@@ -5,3 +5,9 @@ ipykernel
 notebook
 python-multipart
 pillow
+httpx
+pydantic
+openai
+anthropic
+google-cloud-aiplatform
+google-genai
