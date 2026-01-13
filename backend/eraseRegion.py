@@ -52,15 +52,8 @@ async def erase_region(
     mask_data = await mask.read()
     
     img_pil = Image.open(io.BytesIO(image_data))
-    print(f"Image dimensions: {img_pil.size}")
-    
     binary_mask = convert_to_binary_grayscale(mask_data)
-    
     mask_pil = Image.open(io.BytesIO(binary_mask))
-    print(f"Mask dimensions: {mask_pil.size}")
-    
-    print(f"Original mask size: {len(mask_data)} bytes")
-    print(f"Binary mask size: {len(binary_mask)} bytes")
 
     files = {
         "image": (image.filename, image_data, image.content_type),
@@ -73,8 +66,6 @@ async def erase_region(
 
     try:
         response = requests.post(url, headers=headers, files=files, data=data)
-        print(f"Erase Region Response Status: {response.status_code}")
-        print(f"Erase Region Response: {response.text}")
 
         if not response.ok:
             raise HTTPException(

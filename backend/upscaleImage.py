@@ -24,8 +24,6 @@ async def upscale_image(image: UploadFile = File(...)):
 
     try:
         response = requests.post(url, headers=headers, files=files)
-        print(f"Crisp Upscale Response Status: {response.status_code}")
-        print(f"Crisp Upscale Response: {response.text}")
 
         if not response.ok:
             raise HTTPException(

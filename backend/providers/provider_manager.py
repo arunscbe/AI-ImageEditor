@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional, Any
 import os
+import logging
 from dotenv import load_dotenv
 from .base_provider import BaseImageProvider, ProviderFeature
 from .recraft_provider import RecraftProvider
@@ -9,6 +10,7 @@ from .google_imagen_provider import GoogleImagenProvider
 from .gemini_provider import GeminiProvider
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class ProviderManager:
@@ -25,7 +27,7 @@ class ProviderManager:
                     base_url=os.getenv("RECRAFT_URL")
                 )
             except Exception as e:
-                print(f"Failed to initialize Recraft provider: {e}")
+                pass
         
         if os.getenv("OPENAI_API_KEY"):
             try:
@@ -33,7 +35,7 @@ class ProviderManager:
                     api_key=os.getenv("OPENAI_API_KEY")
                 )
             except Exception as e:
-                print(f"Failed to initialize OpenAI provider: {e}")
+                pass
         
         if os.getenv("REPLICATE_API_KEY"):
             try:
@@ -41,16 +43,15 @@ class ProviderManager:
                     api_key=os.getenv("REPLICATE_API_KEY")
                 )
             except Exception as e:
-                print(f"Failed to initialize Replicate provider: {e}")
+                pass
         
         if os.getenv("GEMINI_API_KEY"):
             try:
                 self.providers["gemini"] = GeminiProvider(
                     api_key=os.getenv("GEMINI_API_KEY")
                 )
-                print("Gemini provider initialized (Google AI Studio quality)")
             except Exception as e:
-                print(f"Failed to initialize Gemini provider: {e}")
+                pass
         
         if os.getenv("GOOGLE_PROJECT_ID"):
             try:
@@ -59,9 +60,8 @@ class ProviderManager:
                     location=os.getenv("GOOGLE_LOCATION", "us-central1"),
                     credentials_path=os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
                 )
-                print("Google Imagen (Vertex AI) provider initialized - DEPRECATED, use 'gemini' instead")
             except Exception as e:
-                print(f"Failed to initialize Google Imagen provider: {e}")
+                pass
     
     def get_provider(self, name: str) -> Optional[BaseImageProvider]:
         provider = self.providers.get(name.lower())
@@ -91,7 +91,7 @@ class ProviderManager:
     async def generate_image(
         self,
         prompt: str,
-        provider: str = "recraft",
+        provider: str = "gemini",
         **kwargs
     ) -> Dict[str, Any]:
         provider_instance = self.get_provider(provider)
@@ -107,7 +107,7 @@ class ProviderManager:
         self,
         image_url: str,
         prompt: str,
-        provider: str = "recraft",
+        provider: str = "gemini",
         **kwargs
     ) -> Dict[str, Any]:
         provider_instance = self.get_provider(provider)
@@ -123,7 +123,7 @@ class ProviderManager:
         self,
         image_url: str,
         prompt: str,
-        provider: str = "recraft",
+        provider: str = "gemini",
         **kwargs
     ) -> Dict[str, Any]:
         provider_instance = self.get_provider(provider)
@@ -138,7 +138,7 @@ class ProviderManager:
     async def upscale_image(
         self,
         image_url: str,
-        provider: str = "recraft",
+        provider: str = "gemini",
         **kwargs
     ) -> Dict[str, Any]:
         provider_instance = self.get_provider(provider)
@@ -180,6 +180,34 @@ class ProviderManager:
             )
         
         return await provider_instance.replace_background(image_url, prompt, **kwargs)
+    
+    async def analyze_image(
+        self,
+        image_url: str,
+        provider: str = "gemini",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Analyze an image to determine quality and recommend processing workflow.
+        Defaults to Gemini provider as it has vision capabilities.
+        """
+        logger.info(f"analyze_image called - provider: {provider}, url: {image_url[:100]}")
+        
+        provider_instance = self.get_provider(provider)
+        logger.debug(f"Provider instance: {provider_instance.__class__.__name__}")
+        
+        # Check if provider has analyze_image method
+        if not hasattr(provider_instance, 'analyze_image'):
+            logger.error(f"Provider '{provider}' does not support image analysis")
+            raise ValueError(
+                f"Provider '{provider}' does not support image analysis. Use 'gemini' provider."
+            )
+        
+        logger.debug(f"Calling {provider}.analyze_image")
+        result = await provider_instance.analyze_image(image_url, **kwargs)
+        logger.info(f"analyze_image completed successfully")
+        
+        return result
     
     async def vectorize_image(
         self,

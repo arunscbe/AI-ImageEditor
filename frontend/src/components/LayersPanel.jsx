@@ -55,6 +55,39 @@ const LayersPanel = ({ embedded = false }) => {
         return obj.type.charAt(0).toUpperCase() + obj.type.slice(1);
     };
 
+    const getObjectType = (obj) => {
+        // Determine if object is Vector or Raster
+        const vectorTypes = ['group', 'path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line', 'triangle', 'i-text'];
+        
+        if (vectorTypes.includes(obj.type)) {
+            return 'vector';
+        }
+        
+        if (obj.type === 'image' || obj.type === 'fabric-image') {
+            return 'raster';
+        }
+        
+        return 'unknown';
+    };
+
+    const TypeBadge = ({ type }) => {
+        if (type === 'vector') {
+            return (
+                <span className="px-0.5 py-[1px] text-[7px] font-bold rounded bg-green-100 text-green-700 font-mono align-super leading-none" title="Vector">
+                    V
+                </span>
+            );
+        }
+        if (type === 'raster') {
+            return (
+                <span className="px-0.5 py-[1px] text-[7px] font-bold rounded bg-blue-100 text-blue-700 font-mono align-super leading-none" title="Raster">
+                    R
+                </span>
+            );
+        }
+        return null;
+    };
+
     const handleRename = (obj, index) => {
         setEditingIndex(index);
         setEditingName(getLabel(obj));
@@ -126,16 +159,19 @@ const LayersPanel = ({ embedded = false }) => {
                                         className="flex-1 text-xs font-medium px-1 py-0.5 border border-brand-primary rounded-md focus:outline-none font-sans"
                                     />
                                 ) : (
-                                    <span 
-                                        className={`text-xs font-medium truncate font-sans ${isSelected ? 'text-brand-dark' : 'text-gray-700'}`}
-                                        onDoubleClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRename(obj, index);
-                                        }}
-                                        title="Double-click to rename"
-                                    >
-                                        {getLabel(obj)}
-                                    </span>
+                                    <>
+                                        <span 
+                                            className={`text-xs font-medium truncate font-sans ${isSelected ? 'text-brand-dark' : 'text-gray-700'}`}
+                                            onDoubleClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRename(obj, index);
+                                            }}
+                                            title="Double-click to rename"
+                                        >
+                                            {getLabel(obj)}
+                                        </span>
+                                        <TypeBadge type={getObjectType(obj)} />
+                                    </>
                                 )}
                             </div>
 
@@ -237,16 +273,19 @@ const LayersPanel = ({ embedded = false }) => {
                                         className="flex-1 text-xs font-medium px-1 py-0.5 border border-brand-primary rounded-md focus:outline-none font-sans"
                                     />
                                 ) : (
-                                    <span 
-                                        className={`text-xs font-medium truncate font-sans ${isSelected ? 'text-brand-dark' : 'text-gray-700'}`}
-                                        onDoubleClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRename(obj, index);
-                                        }}
-                                        title="Double-click to rename"
-                                    >
-                                        {getLabel(obj)}
-                                    </span>
+                                    <>
+                                        <span 
+                                            className={`text-xs font-medium truncate font-sans ${isSelected ? 'text-brand-dark' : 'text-gray-700'}`}
+                                            onDoubleClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRename(obj, index);
+                                            }}
+                                            title="Double-click to rename"
+                                        >
+                                            {getLabel(obj)}
+                                        </span>
+                                        <TypeBadge type={getObjectType(obj)} />
+                                    </>
                                 )}
                             </div>
 

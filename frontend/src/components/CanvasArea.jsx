@@ -43,7 +43,7 @@ const CanvasArea = ({ projectId }) => {
 
     useEffect(() => {
         if (projectId) {
-            console.log('Loading project:', projectId);
+            // Project loading logic can be added here
         }
     }, [projectId]);
 
@@ -270,7 +270,6 @@ const CanvasArea = ({ projectId }) => {
                         updateLayers();
                     }
                 } catch (error) {
-                    console.error('SVG load error:', error);
                     alert('Failed to load SVG file. Please ensure it\'s a valid SVG.');
                 }
             };

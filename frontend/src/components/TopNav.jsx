@@ -68,7 +68,8 @@ const TopNav = () => {
         <Logo height={28} />
 
         <div className="flex items-center gap-1.5">
-          <div className="relative">
+          {/* Insert button removed for cleaner cosmetics */}
+          {/*<div className="relative">
             <Button
               variant="ghost"
               size="sm"
@@ -170,7 +171,7 @@ const TopNav = () => {
                 </div>
               </div>
             )}
-          </div>
+          </div> */}
 
           {isEnabled(FEATURES.TEMPLATES_MENU) && (
             <Button
@@ -242,7 +243,7 @@ const TopNav = () => {
             className="bg-gray-100/80 hover:bg-gray-200/80 text-gray-600 hover:text-gray-900 font-semibold gap-1.5 font-heading"
             endIcon={ChevronDown}
           >
-            Untitled
+            Workspace 1
           </Button>
         )}
       </div>
@@ -301,6 +302,7 @@ const TopNav = () => {
         onClose={() => setExportDialogOpen(false)}
         onExport={handleExport}
         objectName={selectedObject?.name || selectedObject?.type || 'object'}
+        isRasterImage={selectedObject?.type === 'image'}
       />
     </header>
   );

@@ -1,0 +1,1042 @@
+import React, { useEffect, useCallback, useMemo, useRef, useState } from "react";
+import useStore from "../store/useStore";
+import { colorKey } from "../utils/colorQuantization";
+import { buildQuantizationMap } from "../utils/colorQuantization";
+import {
+  extractPaletteFromSelection,
+  applyColorMapToSelection,
+  applyColorVisibilityToSelection,
+  storeOriginalColors,
+  hasOriginalColors,
+  restoreOriginalColors,
+  collectAllObjects,
+  getRoots,
+} from "../utils/fabricColorUtils";
+
+const TRANSPARENT_RGBA = "rgba(0,0,0,0)";
+
+// ===============================
+// Component
+// ===============================
+function normalizeToHex(color) {
+  if (!color || typeof color !== "string") return null;
+
+  const c = color.trim().toLowerCase();
+  if (!c || c === "none" || c === "transparent") return null;
+
+  // #rgb / #rrggbb
+  if (c.startsWith("#")) {
+    if (c.length === 4) {
+      const r = c[1], g = c[2], b = c[3];
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    if (c.length === 7) return c.toLowerCase();
+    return null;
+  }
+
+  // rgb/rgba
+  const m = c.match(
+    /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([01]?\.?\d+))?\s*\)/
+  );
+  if (m) {
+    const r = Math.min(255, Math.max(0, parseInt(m[1], 10)));
+    const g = Math.min(255, Math.max(0, parseInt(m[2], 10)));
+    const b = Math.min(255, Math.max(0, parseInt(m[3], 10)));
+    const a = m[4] == null ? 1 : Math.max(0, Math.min(1, parseFloat(m[4])));
+    if (a === 0) return null;
+    return (
+      "#" +
+      [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")
+    ).toLowerCase();
+  }
+
+  return null; // ignore named colors etc. for now
+}
+
+function colorKey(hex) {
+  return String(hex || "").trim().toLowerCase();
+}
+
+function hexToRgbObj(hex) {
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
+// perceptual: Lab in culori is { mode:'lab', l,a,b, alpha? }
+function hexToLabVec(hex) {
+    const rgb = toRgb(hex);
+    if (!rgb) return null;
+    const lab = toLab(rgb);
+    if (!lab) return null;
+  
+    const v = [lab.l, lab.a, lab.b];
+    if (v.some((x) => typeof x !== "number" || Number.isNaN(x))) return null;
+    return v;
+  }
+function labVecToHex(vec) {
+  const [l, a, b] = vec;
+  const rgb = toRgb({ mode: "lab", l, a, b });
+  if (!rgb) return null;
+  return formatHex(rgb).toLowerCase();
+}
+
+// squared Euclidean in Lab (good enough; better than RGB)
+function distLabSq(v1, v2) {
+    if (!Array.isArray(v1) || v1.length < 3) return Number.POSITIVE_INFINITY;
+    if (!Array.isArray(v2) || v2.length < 3) return Number.POSITIVE_INFINITY;
+  
+    const dl = v1[0] - v2[0];
+    const da = v1[1] - v2[1];
+    const db = v1[2] - v2[2];
+    return dl * dl + da * da + db * db;
+  }
+
+// ===============================
+// Fabric-ish helpers
+// ===============================
+function collectAllObjects(root) {
+  const out = [];
+  const visit = (obj) => {
+    if (!obj) return;
+    out.push(obj);
+    if (obj.getObjects && typeof obj.getObjects === "function") {
+      obj.getObjects().forEach(visit);
+    }
+  };
+  visit(root);
+  return out;
+}
+
+function getRoots(selectedObject) {
+  if (!selectedObject) return [];
+  if (selectedObject.getObjects && typeof selectedObject.getObjects === "function") {
+    return selectedObject.getObjects();
+  }
+  return [selectedObject];
+}
+
+// ===============================
+// Palette extraction
+// ===============================
+function extractPaletteFromSelection(selectedObject) {
+  const roots = getRoots(selectedObject);
+  if (roots.length === 0) return [];
+
+  const colorMap = new Map(); // hex -> count
+
+  const addHex = (hex) => {
+    if (!hex) return;
+    const k = colorKey(hex);
+    if (!k || k === "none") return;
+    colorMap.set(k, (colorMap.get(k) || 0) + 1);
+  };
+
+  const handleObj = (obj) => {
+    // fill
+    if (typeof obj.fill === "string") {
+      addHex(normalizeToHex(obj.fill));
+    } else if (obj.fill && typeof obj.fill === "object" && Array.isArray(obj.fill.colorStops)) {
+      obj.fill.colorStops.forEach((stop) => addHex(normalizeToHex(stop?.color)));
+    }
+
+    // stroke
+    if (typeof obj.stroke === "string") {
+      addHex(normalizeToHex(obj.stroke));
+    }
+  };
+
+  roots.forEach((root) => collectAllObjects(root).forEach(handleObj));
+
+  return Array.from(colorMap.entries())
+    .map(([hex, count]) => ({
+      hex,
+      count,
+      rgb: hexToRgbObj(hex),
+      lab: hexToLabVec(hex),
+    }))
+    .filter((c) => c.lab) // drop invalid conversions
+    .sort((a, b) => b.count - a.count);
+}
+
+// ===============================
+// Quantization core (Recraft-like slider)
+// ===============================
+/**
+ * Quantize colors to K using weighted k-means in Lab.
+ * Returns map: originalHex -> quantizedHex
+ *
+ * If lockedPaletteHexes is provided and length>0:
+ *   - We do a "nearest locked color" assignment (brand palette enforcement).
+ *   - This is closer to "apply palette" mode.
+ */
+function buildQuantizationMap(palette, k, lockedPaletteHexes = []) {
+    // ---- Guards ----
+    if (!Array.isArray(palette) || palette.length === 0) return new Map();
+  
+    const unique = palette.filter((c) => Array.isArray(c?.lab) && c.lab.length >= 3);
+    if (unique.length === 0) return new Map();
+  
+    const K = Math.max(1, Math.min(Number(k) || 1, unique.length));
+  
+    // ---- Locked palette mode: snap to nearest locked color ----
+    const lockedLabs = (lockedPaletteHexes || [])
+      .map((h) => colorKey(h))
+      .filter(Boolean)
+      .map((h) => ({ hex: h, lab: hexToLabVec(h) }))
+      .filter((x) => Array.isArray(x.lab) && x.lab.length >= 3);
+  
+    if (lockedLabs.length > 0) {
+      const map = new Map();
+      for (const c of unique) {
+        let best = lockedLabs[0];
+        let bestD = distLabSq(c.lab, best.lab);
+        for (let i = 1; i < lockedLabs.length; i++) {
+          const d = distLabSq(c.lab, lockedLabs[i].lab);
+          if (d < bestD) {
+            bestD = d;
+            best = lockedLabs[i];
+          }
+        }
+        map.set(colorKey(c.hex), best.hex);
+      }
+      return map;
+    }
+  
+    // ---- Build weighted sample set (approx weighted kmeans) ----
+    const MAX_REPL = 30;
+    const data = [];
+    for (const c of unique) {
+      const count = Number(c.count) || 1;
+      const reps = Math.max(1, Math.min(MAX_REPL, Math.round(Math.sqrt(count))));
+      for (let i = 0; i < reps; i++) data.push(c.lab);
+    }
+  
+    const cleanData = data.filter((v) => Array.isArray(v) && v.length >= 3);
+    if (cleanData.length <= K) {
+      // not enough samples to cluster
+      const map = new Map();
+      unique.forEach((c) => map.set(colorKey(c.hex), colorKey(c.hex)));
+      return map;
+    }
+  
+    // ---- Run kmeans (IMPORTANT: use cleanData + K) ----
+    let km;
+    try {
+      km = kmeans(cleanData, K, { initialization: "kmeans++", maxIterations: 100 });
+    } catch (e) {
+      const map = new Map();
+      unique.forEach((c) => map.set(colorKey(c.hex), colorKey(c.hex)));
+      return map;
+    }
+  
+    // ---- Parse centroids for both API shapes ----
+    const centroids = (km?.centroids || [])
+      .map((c) => (Array.isArray(c) ? c : c?.centroid))
+      .filter((v) => Array.isArray(v) && v.length >= 3);
+  
+    if (centroids.length === 0) {
+      const map = new Map();
+      unique.forEach((c) => map.set(colorKey(c.hex), colorKey(c.hex)));
+      return map;
+    }
+  
+    // ---- Snap each centroid to nearest EXISTING palette color (stable output) ----
+    const centroidToHex = centroids.map((cent) => {
+      let best = unique[0];
+      let bestD = distLabSq(cent, best.lab);
+      for (let i = 1; i < unique.length; i++) {
+        const d = distLabSq(cent, unique[i].lab);
+        if (d < bestD) {
+          bestD = d;
+          best = unique[i];
+        }
+      }
+      return colorKey(best.hex);
+    });
+  
+    // ---- Map each original unique color to nearest centroid (then to snapped hex) ----
+    const map = new Map();
+    for (const c of unique) {
+      let bestIdx = 0;
+      let bestD = distLabSq(c.lab, centroids[0]);
+      for (let i = 1; i < centroids.length; i++) {
+        const d = distLabSq(c.lab, centroids[i]);
+        if (d < bestD) {
+          bestD = d;
+          bestIdx = i;
+        }
+      }
+      map.set(colorKey(c.hex), centroidToHex[bestIdx]);
+    }
+  
+    return map;
+  }
+  
+
+// ===============================
+// Toggle visibility of objects with a specific color
+// ===============================
+function applyColorVisibilityToSelection({ selectedObject, canvas, hideColorHex, shouldHide }) {
+  if (!selectedObject || !canvas || !hideColorHex) return;
+
+  const targetKey = colorKey(hideColorHex);
+  const roots = getRoots(selectedObject);
+
+  const updateObj = (obj) => {
+    let hasTargetColor = false;
+
+    // Check fill
+    if (typeof obj.fill === "string") {
+      const h = normalizeToHex(obj.fill);
+      if (h && colorKey(h) === targetKey) {
+        hasTargetColor = true;
+      }
+    } else if (obj.fill && typeof obj.fill === "object" && Array.isArray(obj.fill.colorStops)) {
+      obj.fill.colorStops.forEach((stop) => {
+        const h = normalizeToHex(stop?.color);
+        if (h && colorKey(h) === targetKey) {
+          hasTargetColor = true;
+        }
+      });
+    }
+
+    // Check stroke
+    if (typeof obj.stroke === "string") {
+      const h = normalizeToHex(obj.stroke);
+      if (h && colorKey(h) === targetKey) {
+        hasTargetColor = true;
+      }
+    }
+
+    // Toggle visibility if this object has the target color
+    if (hasTargetColor) {
+      obj.set('visible', !shouldHide);
+      obj.dirty = true;
+    }
+  };
+
+  roots.forEach((root) => {
+    collectAllObjects(root).forEach(updateObj);
+    if (root.set) root.set('dirty', true);
+  });
+
+  // Mark the selected object as dirty and recalculate coordinates
+  if (selectedObject.set) selectedObject.set('dirty', true);
+  if (selectedObject.setCoords) selectedObject.setCoords();
+
+  // Render
+  if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+  else canvas.renderAll();
+}
+
+// ===============================
+// Clone Fabric fill properly (handles gradients/patterns)
+// ===============================
+function cloneFabricFill(fill) {
+  if (!fill) return fill;
+
+  // string fill
+  if (typeof fill === "string") return fill;
+
+  // gradient/pattern: prefer Fabric's toObject() if present
+  if (typeof fill === "object") {
+    if (typeof fill.toObject === "function") {
+      return fill.toObject();
+    }
+    // fallback: structuredClone if available (better than JSON)
+    try {
+      return structuredClone(fill);
+    } catch {
+      return JSON.parse(JSON.stringify(fill));
+    }
+  }
+
+  return fill;
+}
+
+// ===============================
+// Store original colors in objects (for restoration)
+// Each Fabric object gets:
+//   obj.fill = #ffffff (current color, can change)
+//   obj.originalFill = #ffffff (original color, reference for quantize)
+// ===============================
+function storeOriginalColors(selectedObject) {
+  if (!selectedObject) return;
+  
+  const roots = selectedObject.getObjects ? selectedObject.getObjects() : [selectedObject];
+  
+  roots.forEach((root) => {
+    collectAllObjects(root).forEach((obj) => {
+      // Store even if fill is falsy (empty string, null, undefined)
+      if (obj.originalFill === undefined) {
+        obj.originalFill = cloneFabricFill(obj.fill);
+      }
+      if (obj.originalStroke === undefined) {
+        obj.originalStroke = obj.stroke;
+      }
+      if (obj.originalVisible === undefined) {
+        obj.originalVisible = obj.visible;
+      }
+    });
+  });
+}
+
+// ===============================
+// Enliven fill back into Fabric instance (handles gradients)
+// ===============================
+function enlivenFill(fillObj, fabricRef) {
+  // If it's a string, it's already usable
+  if (typeof fillObj === "string" || fillObj == null) return fillObj;
+
+  // Try Gradient.fromObject when it looks like a gradient
+  const isGradient =
+    fillObj &&
+    typeof fillObj === "object" &&
+    (fillObj.type === "linear" || fillObj.type === "radial" || fillObj.colorStops);
+
+  if (isGradient && fabricRef?.Gradient?.fromObject) {
+    try {
+      return fabricRef.Gradient.fromObject(fillObj);
+    } catch {
+      // fall through
+    }
+  }
+
+  // Patterns differ by Fabric version; safest fallback is returning the object.
+  // Some versions accept plain objects for fill; others don't.
+  return fillObj;
+}
+
+// ===============================
+// Check if original colors are stored in the Fabric objects
+// ===============================
+function hasOriginalColors(selectedObject) {
+  if (!selectedObject) return false;
+  
+  const roots = selectedObject.getObjects ? selectedObject.getObjects() : [selectedObject];
+  
+  for (const root of roots) {
+    const objects = collectAllObjects(root);
+    for (const obj of objects) {
+      if (obj.originalFill !== undefined || obj.originalStroke !== undefined) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+// ===============================
+// Restore original colors from stored references (proper Fabric restore)
+// ===============================
+function restoreOriginalColors({ selectedObject, canvas }) {
+  if (!selectedObject || !canvas) return;
+
+  const fabricRef = canvas?.fabric || window?.fabric; // depends on your setup
+  const roots = selectedObject.getObjects ? selectedObject.getObjects() : [selectedObject];
+
+  roots.forEach((root) => {
+    collectAllObjects(root).forEach((obj) => {
+      if (obj.originalFill !== undefined) {
+        const restoredFill = enlivenFill(
+          // structuredClone if possible to avoid mutation coupling
+          (typeof structuredClone === "function" ? structuredClone(obj.originalFill) : obj.originalFill),
+          fabricRef
+        );
+        obj.set("fill", restoredFill);
+      }
+      if (obj.originalStroke !== undefined) {
+        obj.set("stroke", obj.originalStroke);
+      }
+      if (obj.originalVisible !== undefined) {
+        obj.set("visible", obj.originalVisible);
+      }
+
+      obj.dirty = true;
+    });
+
+    if (root.set) root.set("dirty", true);
+  });
+
+  if (selectedObject.set) selectedObject.set("dirty", true);
+  if (selectedObject.setCoords) selectedObject.setCoords();
+
+  if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+  else canvas.renderAll();
+}
+
+// ===============================
+// Apply color map to Fabric objects (using original colors as reference)
+// When useOriginal=true:
+//   - Reads from obj.originalFill (the reference color)
+//   - Maps it to new color via colorMap
+//   - Updates obj.fill (the current color)
+// This allows smooth transition between different K values!
+// ===============================
+function applyColorMapToSelection({ selectedObject, canvas, colorMap, useOriginal = false }) {
+  if (!selectedObject || !canvas || !colorMap || colorMap.size === 0) return;
+
+  const roots = selectedObject.getObjects ? selectedObject.getObjects() : [selectedObject];
+
+  const updateObj = (obj) => {
+    // fill
+    if (typeof obj.fill === "string") {
+      // Use obj.originalFill as reference if available, otherwise use obj.fill
+      const referenceFill = useOriginal && obj.originalFill ? obj.originalFill : obj.fill;
+      const h = normalizeToHex(referenceFill);
+      const to = h ? colorMap.get(colorKey(h)) : null;
+      if (to) {
+        obj.set("fill", to); // Update current fill
+        obj.dirty = true;
+      }
+    } else if (obj.fill && typeof obj.fill === "object" && Array.isArray(obj.fill.colorStops)) {
+      // Handle gradient fills (avoid mutating shared instances)
+      const referenceFill = useOriginal && obj.originalFill ? obj.originalFill : obj.fill;
+      
+      const refStops = referenceFill?.colorStops;
+      if (!Array.isArray(refStops)) return;
+
+      // Clone stops to avoid mutating shared objects
+      const newStops = obj.fill.colorStops.map((s) => ({ ...s }));
+
+      let changed = false;
+      refStops.forEach((stop, idx) => {
+        const h = normalizeToHex(stop?.color);
+        if (!h) return;
+        const to = colorMap.get(colorKey(h));
+        if (to && newStops[idx]) {
+          newStops[idx].color = to;
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        // Keep same gradient object but replace stops
+        const newFill = obj.fill.toObject ? obj.fill.toObject() : { ...obj.fill };
+        newFill.colorStops = newStops;
+
+        // Enliven gradient if possible
+        const fabricRef = canvas?.fabric || window?.fabric;
+        const enlivened = fabricRef?.Gradient?.fromObject
+          ? fabricRef.Gradient.fromObject(newFill)
+          : newFill;
+
+        obj.set("fill", enlivened);
+        obj.dirty = true;
+      }
+    }
+
+    // stroke
+    if (typeof obj.stroke === "string") {
+      const referenceStroke = useOriginal && obj.originalStroke ? obj.originalStroke : obj.stroke;
+      const h = normalizeToHex(referenceStroke);
+      const to = h ? colorMap.get(colorKey(h)) : null;
+      if (to) {
+        obj.set("stroke", to); // Update current stroke
+        obj.dirty = true;
+      }
+    }
+  };
+
+  roots.forEach((root) => {
+    collectAllObjects(root).forEach(updateObj);
+    if (root.set) root.set('dirty', true);
+  });
+
+  // Mark the selected object as dirty and recalculate coordinates
+  if (selectedObject.set) selectedObject.set('dirty', true);
+  if (selectedObject.setCoords) selectedObject.setCoords();
+
+  // Fabric best practice: requestRenderAll when possible
+  if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+  else canvas.renderAll();
+}
+
+// ===============================
+// Component
+// ===============================
+export default function SVGColorPalette({ selectedObject }) {
+  const { canvas } = useStore();
+
+  const [palette, setPalette] = useState([]);
+  const [targetColorCount, setTargetColorCount] = useState(12);
+
+  // locked palette mode (brand palette)
+  const [lockedMode, setLockedMode] = useState(false);
+  const [lockedColors, setLockedColors] = useState([]); // array hex
+
+  // hidden colors (show/hide without replacing)
+  const [hiddenColors, setHiddenColors] = useState(new Set());
+
+  // Force re-render trigger for checking originalColors
+  const [updateTrigger, setUpdateTrigger] = useState(0);
+
+  // Drag and drop state for color merging
+  const [draggedColor, setDraggedColor] = useState(null);
+  const [dropTargetColor, setDropTargetColor] = useState(null);
+
+  const inputRefs = useRef(new Map());
+
+  // Check if originals are stored in Fabric objects
+  const originalsStored = useMemo(() => hasOriginalColors(selectedObject), [selectedObject, palette, updateTrigger]);
+
+  const refreshPalette = useCallback(() => {
+    if (!selectedObject) return [];
+    return extractPaletteFromSelection(selectedObject);
+  }, [selectedObject]);
+
+  useEffect(() => {
+    if (!selectedObject) {
+      setPalette([]);
+      setHiddenColors(new Set());
+      return;
+    }
+    try {
+      const p = refreshPalette();
+      setPalette(p);
+      setTargetColorCount((v) => Math.min(Math.max(1, v), Math.max(1, p.length)));
+      // Reset hidden colors when selecting a new object
+      setHiddenColors(new Set());
+    } catch (e) {
+      console.error("Palette extract failed:", e);
+      setPalette([]);
+      setHiddenColors(new Set());
+    }
+  }, [selectedObject, refreshPalette]);
+
+  const sliderMax = Math.max(1, palette.length);
+  const sliderValue = Math.max(1, Math.min(targetColorCount, sliderMax));
+
+  // Swatch change = explicit recolor (manual)
+  const applyColorChange = useCallback(
+    (fromHex, toHexOrTransparent) => {
+      if (!selectedObject || !canvas) return;
+
+      const from = colorKey(fromHex);
+      if (!from) return;
+
+      const to =
+        toHexOrTransparent === TRANSPARENT_RGBA
+          ? TRANSPARENT_RGBA
+          : normalizeToHex(toHexOrTransparent) || null;
+
+      if (!to) return;
+
+      const map = new Map();
+      map.set(from, to);
+      applyColorMapToSelection({ selectedObject, canvas, colorMap: map });
+      setPalette(refreshPalette());
+    },
+    [selectedObject, canvas, refreshPalette]
+  );
+
+  // The Recraft-like slider action: quantize to K (replaces colors, uses original as reference)
+  const handleApplyQuantize = useCallback(() => {
+    if (!selectedObject || !canvas) return;
+    if (!palette || palette.length === 0) return;
+
+    // Store original colors on first application (each obj.originalFill = obj.fill)
+    if (!hasOriginalColors(selectedObject)) {
+      storeOriginalColors(selectedObject);
+    }
+
+    const k = sliderValue;
+
+    // Build quantization map using original colors as reference
+    const map = buildQuantizationMap(
+      palette,
+      k,
+      lockedMode ? lockedColors : []
+    );
+
+    // Apply color replacement using original colors as reference
+    // Maps obj.originalFill -> new color, sets obj.fill = new color
+    applyColorMapToSelection({ 
+      selectedObject, 
+      canvas, 
+      colorMap: map,
+      useOriginal: true // Use obj.originalFill as reference, update obj.fill
+    });
+    
+    // Refresh palette to show CURRENT colors (after quantization)
+    const newPalette = refreshPalette();
+    setPalette(newPalette);
+    
+    // Update slider max to match new palette size
+    setTargetColorCount((v) => Math.min(v, newPalette.length));
+  }, [selectedObject, canvas, palette, sliderValue, lockedMode, lockedColors, refreshPalette]);
+
+  const toggleLockedColor = useCallback((hex) => {
+    const h = colorKey(hex);
+    if (!h) return;
+    setLockedColors((prev) => {
+      const s = new Set(prev.map(colorKey));
+      if (s.has(h)) s.delete(h);
+      else s.add(h);
+      return Array.from(s);
+    });
+  }, []);
+
+  const toggleColorVisibility = useCallback((hex) => {
+    if (!selectedObject || !canvas) return;
+    const h = colorKey(hex);
+    if (!h) return;
+
+    const isCurrentlyHidden = hiddenColors.has(h);
+    
+    setHiddenColors((prev) => {
+      const newSet = new Set(prev);
+      if (isCurrentlyHidden) {
+        newSet.delete(h);
+      } else {
+        newSet.add(h);
+      }
+      return newSet;
+    });
+
+    // Apply visibility change to canvas
+    applyColorVisibilityToSelection({
+      selectedObject,
+      canvas,
+      hideColorHex: hex,
+      shouldHide: !isCurrentlyHidden
+    });
+  }, [selectedObject, canvas, hiddenColors]);
+
+  const handleResetColors = useCallback(() => {
+    if (!selectedObject || !canvas) return;
+    
+    // Restore obj.fill = obj.originalFill, then delete obj.originalFill
+    restoreOriginalColors({ selectedObject, canvas });
+    setHiddenColors(new Set());
+    setPalette(refreshPalette());
+    // Force re-check of originalsStored (trigger useMemo re-computation)
+    setUpdateTrigger(prev => prev + 1);
+  }, [selectedObject, canvas, refreshPalette]);
+
+  // Drag and drop handlers for color merging
+  const handleDragStart = useCallback((e, color) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedColor(color.hex);
+  }, []);
+
+  const handleDragOver = useCallback((e, color) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetColor(color.hex);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTargetColor(null);
+  }, []);
+
+  const handleDrop = useCallback((e, targetColor) => {
+    e.preventDefault();
+    if (!draggedColor || !targetColor.hex || draggedColor === targetColor.hex) {
+      setDraggedColor(null);
+      setDropTargetColor(null);
+      return;
+    }
+
+    // Merge: replace draggedColor with targetColor
+    applyColorChange(draggedColor, targetColor.hex);
+    
+    setDraggedColor(null);
+    setDropTargetColor(null);
+  }, [draggedColor, applyColorChange]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedColor(null);
+    setDropTargetColor(null);
+  }, []);
+
+  const visiblePalette = useMemo(() => {
+    return palette.filter(c => !hiddenColors.has(colorKey(c.hex)));
+  }, [palette, hiddenColors]);
+
+  const showAllColors = useCallback(() => {
+    if (!selectedObject || !canvas) return;
+    
+    // Show all objects
+    const roots = getRoots(selectedObject);
+    roots.forEach((root) => {
+      collectAllObjects(root).forEach((obj) => {
+        obj.set('visible', true);
+        obj.dirty = true;
+      });
+      if (root.set) root.set('dirty', true);
+    });
+
+    if (selectedObject.set) selectedObject.set('dirty', true);
+    if (selectedObject.setCoords) selectedObject.setCoords();
+
+    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+    else canvas.renderAll();
+
+    setHiddenColors(new Set());
+  }, [selectedObject, canvas]);
+
+  const emptyText = useMemo(() => {
+    if (!selectedObject) return "Select an SVG to see colors";
+    if (palette.length > 0 && visiblePalette.length === 0) return "All colors hidden";
+    return "No colors detected";
+  }, [selectedObject, palette.length, visiblePalette.length]);
+
+  if (!selectedObject || palette.length === 0) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.emptyState}>{emptyText}</div>
+      </div>
+    );
+  }
+
+  if (visiblePalette.length === 0) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.emptyState}>
+          <div>{emptyText}</div>
+          <button onClick={showAllColors} style={styles.showAllBtn}>
+            Show All Colors
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <h3 style={styles.title}>
+          Color Palette ({visiblePalette.length} colors
+          {hiddenColors.size > 0 && `, ${hiddenColors.size} hidden`})
+        </h3>
+
+        {(hiddenColors.size > 0 || originalsStored) && (
+          <div style={styles.row}>
+            {hiddenColors.size > 0 && (
+              <button
+                type="button"
+                onClick={showAllColors}
+                style={{...styles.smallBtn, flex: 1, backgroundColor: '#4CAF50', color: '#fff'}}
+                title="Show all hidden colors"
+              >
+                Show All
+              </button>
+            )}
+            {originalsStored && (
+              <button
+                type="button"
+                onClick={handleResetColors}
+                style={{...styles.smallBtn, flex: 1, backgroundColor: '#FF9800', color: '#fff'}}
+                title="Restore original colors"
+              >
+                Reset Colors
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={styles.row}>
+          <label style={styles.smallLabel}>
+            <input
+              type="checkbox"
+              checked={lockedMode}
+              onChange={(e) => setLockedMode(e.target.checked)}
+              style={{ marginRight: 6 }}
+            />
+            Lock palette (brand colors)
+          </label>
+          <button
+            type="button"
+            onClick={() => setLockedColors([])}
+            style={styles.smallBtn}
+            title="Clear locked colors"
+          >
+            Clear
+          </button>
+        </div>
+        {lockedMode && (
+          <div style={styles.note}>
+            Select swatches below to lock. Quantize will snap all colors to the locked set.
+          </div>
+        )}
+        {!lockedMode && (
+          <div style={styles.note}>
+            💡 Drag & drop colors to merge them, or click to edit individually.
+          </div>
+        )}
+      </div>
+
+      {/* Swatches */}
+      <div style={styles.scrollContainer}>
+        <div style={styles.colorsGrid}>
+          {visiblePalette.map((c) => {
+            const isLocked = lockedMode && lockedColors.map(colorKey).includes(colorKey(c.hex));
+            const isDragging = draggedColor === c.hex;
+            const isDropTarget = dropTargetColor === c.hex;
+            
+            return (
+              <div key={c.hex} style={styles.colorItem}>
+                <div
+                  draggable={!lockedMode}
+                  onDragStart={(e) => handleDragStart(e, c)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOver(e, c)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, c)}
+                  style={{
+                    ...styles.colorSwatch,
+                    backgroundColor: c.hex,
+                    outline: isLocked 
+                      ? "3px solid #111" 
+                      : isDropTarget 
+                      ? "3px dashed #4CAF50" 
+                      : "none",
+                    opacity: isDragging ? 0.4 : 1,
+                    cursor: lockedMode ? "pointer" : "grab",
+                    transform: isDropTarget ? "scale(1.1)" : "scale(1)",
+                    transition: "all 0.2s ease",
+                  }}
+                  onClick={() => (lockedMode ? toggleLockedColor(c.hex) : inputRefs.current.get(c.hex)?.click?.())}
+                  title={
+                    lockedMode
+                      ? (isLocked ? "Locked (click to unlock)" : "Click to lock this as palette color")
+                      : `${c.hex} - Drag to merge, click to change`
+                  }
+                />
+                {!lockedMode && (
+                  <>
+                    <input
+                      ref={(el) => {
+                        if (el) inputRefs.current.set(c.hex, el);
+                        else inputRefs.current.delete(c.hex);
+                      }}
+                      type="color"
+                      value={c.hex}
+                      onChange={(e) => applyColorChange(c.hex, e.target.value)}
+                      style={styles.colorInput}
+                      aria-label={`Pick color for ${c.hex}`}
+                    />
+                    <button
+                      onClick={() => toggleColorVisibility(c.hex)}
+                      style={styles.removeBtn}
+                      title="Hide this color from view"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
+                <div style={styles.count}>{c.count}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Quantize Slider */}
+      {visiblePalette.length > 1 && (
+        <div style={styles.section}>
+          <label style={styles.label}>
+            Number of colors: {sliderValue}
+          </label>
+          <input
+            type="range"
+            min="1"
+            max={sliderMax}
+            value={sliderValue}
+            onChange={(e) => setTargetColorCount(parseInt(e.target.value, 10))}
+            style={styles.slider}
+          />
+          <button onClick={handleApplyQuantize} style={styles.button} type="button">
+            Apply (Quantize)
+          </button>
+          <div style={styles.note}>
+            Reduces colors to target count using original colors as reference. Click "Reset Colors" to restore originals.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  container: { padding: "0" },
+  header: { marginBottom: "10px", padding: "0 4px" },
+  title: { margin: 0, fontSize: "13px", fontWeight: "600", color: "#666" },
+  row: { display: "flex", gap: 10, alignItems: "center", marginTop: 8 },
+  smallLabel: { fontSize: "12px", color: "#444", userSelect: "none" },
+  smallBtn: {
+    padding: "4px 8px",
+    border: "1px solid #ddd",
+    borderRadius: 6,
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: 12,
+  },
+  note: { marginTop: 8, fontSize: 11, color: "#777", lineHeight: 1.3 },
+  emptyState: { padding: "20px", textAlign: "center", color: "#999", fontSize: "12px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" },
+  showAllBtn: {
+    padding: "8px 16px",
+    backgroundColor: "#4CAF50",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: "600",
+    cursor: "pointer",
+    marginTop: "8px",
+  },
+  scrollContainer: {
+    maxHeight: "300px",
+    overflowY: "auto",
+    overflowX: "hidden",
+    marginBottom: "12px",
+    paddingRight: "4px",
+  },
+  colorsGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" },
+  colorItem: { display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", position: "relative" },
+  colorSwatch: {
+    width: "48px",
+    height: "48px",
+    borderRadius: "6px",
+    border: "2px solid #e0e0e0",
+    cursor: "pointer",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  },
+  count: { fontSize: 10, color: "#666" },
+  colorInput: { position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" },
+  removeBtn: {
+    width: "48px",
+    height: "20px",
+    border: "1px solid #e0e0e0",
+    borderRadius: "4px",
+    backgroundColor: "#fff",
+    color: "#e53935",
+    fontSize: "16px",
+    fontWeight: "bold",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 0,
+  },
+  section: { marginTop: "10px", padding: "12px", backgroundColor: "#f9f9f9", borderRadius: "6px", border: "1px solid #e0e0e0" },
+  label: { display: "block", marginBottom: "8px", fontSize: "12px", fontWeight: "500", color: "#666" },
+  slider: { width: "100%", marginBottom: "8px", height: "4px" },
+  button: {
+    width: "100%",
+    padding: "8px 16px",
+    backgroundColor: "#4CAF50",
+    color: "#fff",
+    border: "none",
+    borderRadius: "4px",
+    fontSize: "12px",
+    fontWeight: "600",
+    cursor: "pointer",
+  },
+};

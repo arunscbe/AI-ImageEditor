@@ -108,7 +108,7 @@ class GoogleImagenProvider(BaseImageProvider):
                 from io import BytesIO
                 pil_image = Image.open(BytesIO(img_bytes))
             
-            filepath = save_pil_image(pil_image, prefix=f"google_imagen_{idx}")
+            filepath = save_pil_image(pil_image, prefix="final_")
             image_url = get_image_url(filepath)
             
             results.append({
@@ -161,7 +161,7 @@ class GoogleImagenProvider(BaseImageProvider):
                 from io import BytesIO
                 pil_image = Image.open(BytesIO(img_bytes))
             
-            filepath = save_pil_image(pil_image, prefix=f"google_edit_{idx}")
+            filepath = save_pil_image(pil_image, prefix="final_")
             image_url = get_image_url(filepath)
             
             results.append({
@@ -249,7 +249,7 @@ class GoogleImagenProvider(BaseImageProvider):
             from io import BytesIO
             pil_image = Image.open(BytesIO(img_bytes))
         
-        filepath = save_pil_image(pil_image, prefix="google_upscale")
+        filepath = save_pil_image(pil_image, prefix="temp_")
         image_url = get_image_url(filepath)
         
         return self.normalize_response({

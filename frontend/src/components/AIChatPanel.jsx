@@ -114,7 +114,7 @@ const AIChatPanel = () => {
   const styleMenuRef = useRef(null);
   const providerMenuRef = useRef(null);
   const { selectedObject, canvas, addAIImage } = useStore();
-  const isImageSelected = selectedObject?.type === "image";
+  const isImageSelected = selectedObject && selectedObject.type === 'image' && typeof selectedObject.getSrc === 'function';
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -140,27 +140,25 @@ const AIChatPanel = () => {
         method: "DELETE",
       });
       setConversationId(`user-${Date.now()}`);
-      console.log("Chat history cleared");
     } catch (error) {
-      console.error("Error clearing history:", error);
+      // Error clearing history
     }
   };
 
   const handleSubmit = async () => {
     if (!prompt.trim() || isLoading) return;
 
-    console.log("AI Prompt:", prompt);
     setIsLoading(true);
 
     try {
       let messageToSend = prompt;
       
       if (isImageSelected) {
-        let imageUrl = selectedObject.getSrc();
+        let imageUrl = null;
         
-        if (!imageUrl.startsWith('http')) {
-          console.log("Canvas image detected, uploading first...");
-          
+        if (selectedObject.type === 'image' && selectedObject.getSrc && selectedObject.getSrc().startsWith('http')) {
+          imageUrl = selectedObject.getSrc();
+        } else {
           const dataURL = selectedObject.toDataURL({
             format: "png",
             quality: 1,
@@ -181,7 +179,6 @@ const AIChatPanel = () => {
           
           const uploadData = await uploadResponse.json();
           imageUrl = uploadData.url;
-          console.log("Canvas image uploaded:", imageUrl);
         }
         
         messageToSend = `${prompt} [Image URL: ${imageUrl}] [Provider: ${selectedProvider}] [Style: ${selectedStyle}]`;
@@ -194,8 +191,6 @@ const AIChatPanel = () => {
         if (fontStyle) {
           messageToSend += ` [Font: ${fontStyle}]`;
         }
-        
-        console.log("Sending with image context:", imageUrl);
       } else {
         messageToSend = `${prompt} [Provider: ${selectedProvider}] [Style: ${selectedStyle}]`;
         
@@ -228,15 +223,10 @@ const AIChatPanel = () => {
       }
 
       const data = await response.json();
-      console.log("Orchestrator Response:", data);
-      console.log("Full data structure:", JSON.stringify(data, null, 2));
 
       if (data.images && data.images.length > 0) {
-        console.log("Processing images:", data.images);
-        
         if (!versioningEnabled && isImageSelected) {
           for (const imageUrl of data.images) {
-            console.log("Replacing image URL:", imageUrl);
             if (imageUrl && selectedObject) {
               const currentLeft = selectedObject.left;
               const currentTop = selectedObject.top;
@@ -256,21 +246,15 @@ const AIChatPanel = () => {
           }
         } else {
           for (const imageUrl of data.images) {
-            console.log("Adding new image URL:", imageUrl);
             if (imageUrl) {
               await addAIImage(imageUrl);
             }
           }
         }
-      } else {
-        console.warn("No images found in response. Data:", data);
       }
-
-      console.log("Actions taken:", data.actions_taken);
       
       setPrompt("");
     } catch (error) {
-      console.error("Error generating image:", error);
       alert(`Error: ${error.message}`);
     } finally {
       setIsLoading(false);
@@ -423,7 +407,8 @@ const AIChatPanel = () => {
               </select>
             </div>
 
-            <label className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent hover:bg-gray-50 rounded-full cursor-pointer transition-all">
+            {/* Commented out - cosmetic cleanup */}
+            {/* <label className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent hover:bg-gray-50 rounded-full cursor-pointer transition-all">
               <input
                 type="checkbox"
                 checked={versioningEnabled}
@@ -431,9 +416,9 @@ const AIChatPanel = () => {
                 className="w-4 h-4 text-gray-800 border-gray-300 rounded focus:ring-2 focus:ring-gray-400 focus:ring-offset-0"
               />
               <span className="text-sm font-normal text-gray-700">New</span>
-            </label>
+            </label> */}
 
-            <div className="relative" ref={providerMenuRef}>
+            {/* <div className="relative" ref={providerMenuRef}>
               <button
                 onClick={() => setShowProviderMenu(!showProviderMenu)}
                 className="pl-2 pr-2.5 py-1.5 bg-transparent hover:bg-gray-50 rounded-full transition-all flex items-center gap-2 text-sm font-normal text-gray-700 border-0 whitespace-nowrap"
@@ -469,7 +454,7 @@ const AIChatPanel = () => {
                   ))}
                 </div>
               )}
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

@@ -1,0 +1,261 @@
+[
+  {
+    "name": "ACCELERATOR RICHARDSON",
+    "label": "Accel",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/ACCELERATOR_RICHARDSON.ttf",
+    "sortOrder": 1,
+    "tags": ["text"]
+  },
+  {
+    "name": "Athletic Block",
+    "label": "Athletic Block",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Athletic_Block.ttf",
+    "sortOrder": 2,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Ballpark",
+    "label": "Ballpark",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Ballpark.TTF",
+    "sortOrder": 3,
+    "tags": ["text"]
+  },
+  {
+    "name": "BrushScript BT",
+    "label": "Brush Script",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/BrushScript_BT.ttf",
+    "sortOrder": 6,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Bebas Kai",
+    "label": "BebasKai",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Bebas_Kai.otf",
+    "sortOrder": 4,
+    "tags": ["text"]
+  },
+  {
+    "name": "Beton CG ExtraBold",
+    "label": "Beton CG Extra Bold",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Beton_CG_ExtraBold.otf",
+    "sortOrder": 5,
+    "tags": ["text"]
+  },  
+  {
+    "name": "CityDBol",
+    "label": "City Block",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/CityDBol.ttf",
+    "sortOrder": 7,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Century Richardson",
+    "label": "Century",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Century_Richardson.ttf",
+    "sortOrder": 8,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Condensed Block",
+    "label": "Condensed Block",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Condensed_Block_Richardson.ttf",
+    "sortOrder": 9,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "CopprplGoth Bd BT",
+    "label": "Copper",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/CopprplGoth_Bd_BT.ttf",
+    "sortOrder": 10,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },  
+  {
+    "name": "Euro Block",
+    "label": "Euro Block",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/HandelGotDBol.ttf",
+    "sortOrder": 12,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Full Block",
+    "label": "Full Block",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Full_Block_Richardson.ttf",
+    "sortOrder": 13,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Bebas Kai",
+    "label": "Heritage",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Bebas_Kai.otf",
+    "sortOrder": 16,
+    "tags": ["text"]
+  },  
+  {
+    "name": "SocietyEditor Personal Use",
+    "label": "Lakesight",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/SocietyEditor_Personal_Use.ttf",
+    "sortOrder": 17,
+    "tags": ["text"]
+  },  
+  {
+    "name": "machinen",
+    "label": "Machine",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/machinen.ttf",
+    "sortOrder": 18,
+    "tags": ["text"]
+  },
+  {
+    "name": "Magneto",
+    "label": "Magento",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Magneto.ttf",
+    "sortOrder": 19,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Niramit Bold",
+    "label": "Niramit Extrabold",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Niramit_Bold.ttf",
+    "sortOrder": 20,
+    "tags": ["text"]
+  },  
+  {
+    "name": "Plain",
+    "label": "Plain",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Plain.ttf",
+    "sortOrder": 21,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Puff",
+    "label": "Puff",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/puff.ttf",
+    "sortOrder": 22,
+    "tags": ["text"]
+  },
+  {
+    "name": "Square721 BdEx BT",
+    "label": "Square",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Square721_BdEx_BT.ttf",
+    "sortOrder": 23,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "SocietyEditor Personal Use", 
+    "label": "Society Editor",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/SocietyEditor_Personal_Use.ttf",
+    "sortOrder": 24,
+    "tags": ["text"]
+  },
+  {
+    "name": "Swis721 Cn BT",
+    "label": "Swiss Condensed",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Swis721_Cn_BT.ttf",
+    "sortOrder": 25,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },  
+  {
+    "name": "Stahls Tiffany - 2000",
+    "label": "Tiffany",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Stahls_Tiffany-2000.ttf",
+    "sortOrder": 27,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Times Richardson",
+    "label": "Times",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Times_Richardson.ttf",
+    "sortOrder": 28,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "UNISCRIPT",
+    "label": "Uni Script",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/UNISCRIPT.ttf",
+    "sortOrder": 29,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Anton-Regular",
+    "label": "Anton",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Anton-Regular.ttf",
+    "sortOrder": 30,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Lobster-Regular",
+    "label": "Lobster",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Lobster-Regular.ttf",
+    "sortOrder": 31,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Teko-Regular",
+    "label": "Teko",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Teko-Bold.ttf",
+    "sortOrder": 32,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Play-Bold",
+    "label": "Play",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Play-Bold.ttf",
+    "sortOrder": 33,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "OleoScript-Regular",
+    "label": "Oleo Script",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/OleoScript-Regular.ttf",
+    "sortOrder": 34,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "FugazOne-Regular",
+    "label": "Fugaz One",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/FugazOne-Regular.ttf",
+    "sortOrder": 36,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },  
+  {
+    "name": "PirataOne-Regular",
+    "label": "Pirata One",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/PirataOne-Regular.ttf",
+    "sortOrder": 38,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Courgette-Regular",
+    "label": "Courgette",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/Courgette-Regular.ttf",
+    "sortOrder": 39,
+    "tags": ["playerName", "playerNumber", "teamName", "text"]
+  },
+  {
+    "name": "Old English",
+    "label": "Old English",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/OldeEnglish.ttf",
+    "sortOrder": 40,
+    "tags": ["text"]
+  },
+  {
+    "name": "Jersey Block",
+    "label": "Jersey Block",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/Staubach.ttf",
+    "sortOrder": 41,
+    "tags": ["text"]
+  },
+  {
+    "name": "Hard Ball",
+    "label": "Hard Ball",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/IFC_HARDBALL.ttf",
+    "sortOrder": 42,
+    "tags": ["text"]
+  },
+  {
+    "name": "Sport Script",
+    "label": "Sport Script",
+    "src": "https://storage.googleapis.com/3ddplusgcp/richardson-customizer/fonts/ttf/LHANDW.TTF",
+    "sortOrder": 43,
+    "tags": ["text"]
+  }
+]

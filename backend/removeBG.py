@@ -23,6 +23,4 @@ async def remove_bg(image: UploadFile = File(...)):
     }
 
     response = requests.post(url, headers=headers, files=files)
-    print("Recraft Response:", response.text)
-
     return response.json()

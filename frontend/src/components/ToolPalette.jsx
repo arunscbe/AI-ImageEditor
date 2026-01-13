@@ -1,130 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import {
-    MousePointer2,
-    Type,
-    Pencil,
-    Square,
-    Circle,
-    Upload,
-    ZoomIn,
-    Hand,
-    Eraser,
-    Image as ImageIcon,
-    Move,
-    Copy
-} from 'lucide-react';
 import useStore from '../store/useStore';
+import { getToolbarTools } from '../config/toolsConfig';
 
-const ToolPalette = () => {
+const ToolPalette = ({ hasCanvasObjects = false }) => {
     const { activeTool, setActiveTool, handleCanvasAction, canvas, handleDuplicate, selectedObject } = useStore();
     const [hoveredTool, setHoveredTool] = useState(null);
 
-    const tools = [
-        { 
-            id: 'select', 
-            icon: MousePointer2, 
-            label: 'Select / Move',
-            shortcut: 'V',
-            action: () => {
-                if (canvas) {
-                    canvas.isDrawingMode = false;
-                    canvas.selection = true;
-                    canvas.forEachObject(obj => {
-                        obj.selectable = true;
-                        obj.evented = true;
-                    });
-                }
-                setActiveTool('select');
-            }
-        },
-        { 
-            id: 'duplicate', 
-            icon: Copy, 
-            label: 'Duplicate',
-            shortcut: 'D',
-            action: () => handleDuplicate(),
-            requiresSelection: true
-        },
-        { 
-            type: 'separator' 
-        },
-        { 
-            id: 'text', 
-            icon: Type, 
-            label: 'Text',
-            shortcut: 'T',
-            action: () => handleCanvasAction('ADD_TEXT')
-        },
-        { 
-            id: 'brush', 
-            icon: Pencil, 
-            label: 'Brush',
-            shortcut: 'B',
-            action: () => handleCanvasAction('TOGGLE_BRUSH')
-        },
-        { 
-            id: 'shape-rect', 
-            icon: Square, 
-            label: 'Rectangle',
-            shortcut: 'R',
-            action: () => handleCanvasAction('ADD_RECTANGLE')
-        },
-        { 
-            id: 'shape-circle', 
-            icon: Circle, 
-            label: 'Circle',
-            shortcut: 'C',
-            action: () => handleCanvasAction('ADD_CIRCLE')
-        },
-        { 
-            id: 'upload', 
-            icon: Upload, 
-            label: 'Upload Image',
-            shortcut: 'U',
-            action: () => setActiveTool('upload')
-        },
-        { 
-            id: 'ai-image', 
-            icon: ImageIcon, 
-            label: 'AI Generate',
-            shortcut: 'G',
-            action: () => handleCanvasAction('Image')
-        },
-        { 
-            type: 'separator' 
-        },
-        { 
-            id: 'zoom', 
-            icon: ZoomIn, 
-            label: 'Zoom',
-            shortcut: 'Z',
-            action: () => {
-                setActiveTool('zoom');
-            }
-        },
-        { 
-            id: 'pan', 
-            icon: Hand, 
-            label: 'Pan / Hand',
-            shortcut: 'H',
-            action: () => {
-                if (canvas) {
-                    canvas.isDrawingMode = false;
-                }
-                setActiveTool('pan');
-            }
+    // Get tools from central config and bind actions
+    const toolsConfig = getToolbarTools();
+    const tools = toolsConfig.map(tool => {
+        if (tool.type === 'separator') {
+            return tool;
         }
-    ];
+        
+        return {
+            ...tool,
+            action: tool.getAction({ 
+                canvas, 
+                setActiveTool, 
+                handleCanvasAction, 
+                handleDuplicate 
+            })
+        };
+    });
 
     const handleToolClick = (tool) => {
         if (tool.requiresSelection && !selectedObject) {
-            console.warn('This action requires a selected object');
             return;
         }
         
         if (tool.action) {
             tool.action();
-            if (tool.id !== 'upload' && tool.id !== 'ai-image' && tool.id !== 'duplicate') {
+            if (tool.id !== 'upload' && tool.id !== 'blank-canvas' && tool.id !== 'duplicate') {
                 setActiveTool(tool.id);
             }
         }
@@ -152,9 +59,19 @@ const ToolPalette = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [tools, canvas, selectedObject]);
 
+    // Don't render at all if no objects
+    if (!hasCanvasObjects) {
+        return null;
+    }
+
     return (
         <>
-            <div className="fixed left-4 top-1/2 -translate-y-1/2 z-20 bg-white rounded-lg shadow-md border border-gray-200 p-1.5 flex flex-col gap-0.5">
+            <div 
+                className="fixed top-1/2 -translate-y-1/2 z-20 bg-white rounded-lg shadow-md border border-gray-200 p-1.5 flex flex-col gap-0.5"
+                style={{
+                    animation: 'slideInFromCenter 0.5s cubic-bezier(0.4, 0, 0.6, 1) forwards',
+                }}
+            >
                 {tools.map((tool, index) => {
                     if (tool.type === 'separator') {
                         return (
@@ -203,7 +120,7 @@ const ToolPalette = () => {
                 >
                     <div className="bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg">
                         <div className="font-medium font-sans">
-                            {tools.find(t => t.id === hoveredTool)?.label}
+                            {tools.find(t => t.id === hoveredTool)?.description || tools.find(t => t.id === hoveredTool)?.label}
                         </div>
                         <div className="text-[10px] text-gray-400 mt-0.5 font-sans">
                             Press {tools.find(t => t.id === hoveredTool)?.shortcut}
@@ -221,6 +138,34 @@ const ToolPalette = () => {
                     to {
                         opacity: 1;
                         transform: translateX(0);
+                    }
+                }
+                
+                @keyframes slideInFromCenter {
+                    0% {
+                        opacity: 0;
+                        left: 50%;
+                        transform: translateX(-50%) translateY(-50%) scale(0.95);
+                    }
+                    35% {
+                        opacity: 0;
+                        left: 40%;
+                        transform: translateX(-50%) translateY(-50%) scale(0.96);
+                    }
+                    50% {
+                        opacity: 0.5;
+                        left: 25%;
+                        transform: translateX(-50%) translateY(-50%) scale(0.98);
+                    }
+                    75% {
+                        opacity: 0.8;
+                        left: 10%;
+                        transform: translateX(-50%) translateY(-50%) scale(0.99);
+                    }
+                    100% {
+                        opacity: 1;
+                        left: 1rem;
+                        transform: translateX(0) translateY(-50%) scale(1);
                     }
                 }
             `}</style>

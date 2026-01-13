@@ -8,6 +8,7 @@ import CanvasArea from '../components/CanvasArea';
 import AIChatPanel from '../components/AIChatPanel';
 import EmptyStateGuidance from '../components/EmptyStateGuidance';
 import ProcessingOverlay from '../components/ProcessingOverlay';
+import MascotPicker from '../components/MascotPicker';
 import Button from '../components/ui/Button';
 import useStore from '../store/useStore';
 import useFeatureFlagStore from '../features/useFeatureFlag';
@@ -23,29 +24,23 @@ const ProjectPage = () => {
     setSuggestedPrompts, 
     canvas,
     setExportDialogOpen,
-    handleDuplicate
+    handleDuplicate,
+    isMascotPickerOpen,
+    setMascotPickerOpen,
+    addMascot,
+    activeTool,
+    setActiveTool
   } = useStore();
   const { isEnabled } = useFeatureFlagStore();
 
-  console.log('ProjectPage loaded');
-  console.log('UUID:', uuid);
-  console.log('Location state:', location.state);
-
   useEffect(() => {
-    console.log('ProjectPage useEffect triggered');
-    console.log('Location state in effect:', location.state);
-    
     if (location.state?.intent) {
       const intent = location.state.intent;
-      console.log('Setting intent:', intent);
       setProjectIntent(intent);
       
       if (intent.canvasSetup?.suggestedPrompts) {
-        console.log('Setting prompts:', intent.canvasSetup.suggestedPrompts);
         setSuggestedPrompts(intent.canvasSetup.suggestedPrompts);
       }
-    } else {
-      console.log('No intent in location state');
     }
   }, [location.state, setProjectIntent, setSuggestedPrompts]);
 
@@ -76,20 +71,18 @@ const ProjectPage = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedObject, setExportDialogOpen, handleDuplicate]);
 
+  // Open mascot picker when activeTool is set to 'mascot'
+  useEffect(() => {
+    if (activeTool === 'mascot') {
+      setMascotPickerOpen(true);
+      setActiveTool(null); // Reset tool after opening picker
+    }
+  }, [activeTool, setMascotPickerOpen, setActiveTool]);
+
   const isTextSelected = selectedObject?.type === 'i-text';
   const isImageSelected = selectedObject?.type === 'image';
   const isShapeSelected = ['rect', 'circle', 'line', 'path', 'polygon', 'polyline', 'triangle', 'group'].includes(selectedObject?.type);
-  
-  // Show image properties panel for images, groups (SVG), and shapes with colors
   const showImagePropertiesPanel = isImageSelected || isShapeSelected;
-  
-  console.log('Selected object:', selectedObject);
-  console.log('Selected object type:', selectedObject?.type);
-  console.log('isImageSelected:', isImageSelected);
-  console.log('isShapeSelected:', isShapeSelected);
-  console.log('showImagePropertiesPanel:', showImagePropertiesPanel);
-  console.log('IMAGE_PROPERTIES feature enabled:', isEnabled(FEATURES.IMAGE_PROPERTIES));
-
   const hasCanvasObjects = canvas?.getObjects().length > 0;
 
   return (
@@ -109,12 +102,18 @@ const ProjectPage = () => {
           Back to Projects
         </Button>
 
-        <ToolPalette />
+        <ToolPalette hasCanvasObjects={hasCanvasObjects} />
         <RightPanel />
 
         {isEnabled(FEATURES.AI_IMAGE_GENERATION) && <AIChatPanel />}
 
-        {!hasCanvasObjects && <EmptyStateGuidance />}
+        <EmptyStateGuidance hasCanvasObjects={hasCanvasObjects} />
+
+        <MascotPicker
+          isOpen={isMascotPickerOpen}
+          onClose={() => setMascotPickerOpen(false)}
+          onSelect={(mascot) => addMascot(mascot)}
+        />
 
         <main className="absolute inset-0 z-0">
           <CanvasArea projectId={uuid} />

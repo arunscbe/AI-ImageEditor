@@ -63,13 +63,6 @@ const EnhancedEraseRegionTool = () => {
     setImagePreview(imageDataURL);
     setMaskCanvas(canvas);
     setMaskCtx(ctx);
-    
-    console.log('Mask canvas initialized:', {
-      width: canvas.width,
-      height: canvas.height,
-      naturalWidth,
-      naturalHeight
-    });
   }, [selectedObject]);
 
   const getCanvasCoords = (e) => {
@@ -192,12 +185,10 @@ const EnhancedEraseRegionTool = () => {
     tempCtx.putImageData(imageData, 0, 0);
     
     const maskDataURL = tempCanvas.toDataURL('image/png');
-    console.log('Binary mask created, data URL length:', maskDataURL.length);
     
     try {
       await eraseRegion(maskDataURL);
     } catch (error) {
-      console.error('Erase region failed:', error);
       alert(`Failed to erase region: ${error.message}`);
     }
   };

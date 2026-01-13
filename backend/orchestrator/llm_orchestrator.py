@@ -1,9 +1,15 @@
 import os
+import logging
+import re
 from typing import Dict, List, Any, Optional
 from anthropic import Anthropic
 from providers.provider_manager import provider_manager
+from config.configuration import orchestrator_config, provider_config
+from config.prompts import orchestrator_prompts
 from .tools_schema import ALL_TOOLS
 from .conversation_manager import ConversationManager, conversation_manager as default_conv_manager
+
+logger = logging.getLogger(__name__)
 
 
 class LLMOrchestrator:
@@ -11,7 +17,7 @@ class LLMOrchestrator:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: Optional[str] = None,
         conversation_manager: Optional[ConversationManager] = None
     ):
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
@@ -19,50 +25,47 @@ class LLMOrchestrator:
             raise ValueError("ANTHROPIC_API_KEY not found in environment")
         
         self.client = Anthropic(api_key=self.api_key)
-        self.model = model
+        self.model = model or orchestrator_config.CLAUDE_MODEL
         self.conversation_manager = conversation_manager or default_conv_manager
         self.system_prompt = self._build_system_prompt()
     
     def _build_system_prompt(self) -> str:
-        available_providers = provider_manager.list_providers()
-        providers_info = "\n".join([
-            f"- {p['name']}: {', '.join(p['features'])}"
-            for p in available_providers
-        ])
+        from config.prompts.orchestrator_prompts import ProviderDefaults
         
-        return f"""You are an AI image generation assistant with access to multiple AI providers.
-
-IMPORTANT: When the user asks to create/generate an image, you MUST immediately call the generate_image tool.
-Do NOT just describe what you will do - actually DO it by calling the tool.
-
-Your workflow:
-1. Understand what the user wants
-2. IMMEDIATELY call the appropriate tool (don't explain first)
-3. After the tool succeeds, provide a brief confirmation
-
-Available providers and their capabilities:
-{providers_info}
-
-Provider selection guidelines:
-- **recraft**: Fast, versatile, good for general use, supports background operations
-- **openai**: Best prompt understanding, creative, good for artistic images
-- **replicate**: Highest quality (Flux models), best for photorealistic images
-- **google-imagen**: Best for text rendering in images (logos, signs, posters)
-
-When enhancing prompts:
-- Add style details (photorealistic, digital art, oil painting, etc.)
-- Include lighting (natural light, studio lighting, golden hour, etc.)
-- Specify quality (4K, professional, detailed, etc.)
-- Add composition details (centered, rule of thirds, etc.)
-
-Remember: TAKE ACTION FIRST (call tools), EXPLAIN LATER (brief confirmation)."""
+        available_providers = provider_manager.list_providers()
+        providers_info = orchestrator_prompts.format_providers_info(available_providers)
+        
+        defaults = ProviderDefaults(
+            generate=provider_config.DEFAULT_PROVIDER_GENERATE,
+            enhance=provider_config.DEFAULT_PROVIDER_ENHANCE,
+            vectorize=provider_config.DEFAULT_PROVIDER_VECTORIZE,
+            erase=provider_config.DEFAULT_PROVIDER_ERASE
+        )
+        
+        return orchestrator_prompts.build_orchestrator_system_prompt(
+            providers_info=providers_info,
+            defaults=defaults,
+            include_tool_contracts=False
+        )
     
     async def process_message(
         self,
         message: str,
         conversation_id: str = "default",
-        max_iterations: int = 5
+        max_iterations: Optional[int] = None
     ) -> Dict[str, Any]:
+        max_iterations = max_iterations or orchestrator_config.DEFAULT_ITERATIONS
+        
+        # Auto-detect image URLs that need analysis
+        image_url_pattern = r'https?://[^\s]+\.(png|jpg|jpeg|gif|webp|svg)'
+        image_urls = re.findall(image_url_pattern, message, re.IGNORECASE)
+        
+        should_analyze = orchestrator_config.should_auto_analyze(message, bool(image_urls))
+        
+        if should_analyze:
+            logger.info(f"Auto-triggering image analysis for URL: {image_urls[0]}")
+            message = orchestrator_prompts.build_mandatory_analysis_prefix(image_urls[0], message)
+        
         conversation = self.conversation_manager.get_or_create_conversation(conversation_id)
         conversation.add_message("user", message)
         
@@ -93,9 +96,6 @@ Remember: TAKE ACTION FIRST (call tools), EXPLAIN LATER (brief confirmation)."""
                     tool_name = block.name
                     tool_input = block.input
                     
-                    print(f"🔧 Executing tool: {tool_name}")
-                    print(f"   Input: {tool_input}")
-                    
                     try:
                         result = await self._execute_tool(tool_name, tool_input)
                         
@@ -108,19 +108,23 @@ Remember: TAKE ACTION FIRST (call tools), EXPLAIN LATER (brief confirmation)."""
                         
                         actions_taken.append(f"{tool_name}")
                         
-                        # Extract image URLs from various response formats
+                        # Track if this is a final output tool (vectorize) or intermediate
+                        is_final_output = tool_name in ["vectorize_image", "generate_image"]
+                        
+                        # For chained workflows (enhance → vectorize), only keep final output
+                        # Clear intermediate images when a final output tool succeeds
+                        if is_final_output and generated_images:
+                            generated_images.clear()
+                        
                         if result.get("data", {}).get("images"):
                             for img in result["data"]["images"]:
                                 url = img.get("url") if isinstance(img, dict) else img
                                 if url:
-                                    print(f"📸 Found image URL: {url}")
                                     generated_images.append(url)
-                        # Handle direct images array
                         elif result.get("images"):
                             for img in result["images"]:
                                 url = img.get("url") if isinstance(img, dict) else img
                                 if url:
-                                    print(f"📸 Found image URL: {url}")
                                     generated_images.append(url)
                         
                         messages.append({
@@ -138,7 +142,6 @@ Remember: TAKE ACTION FIRST (call tools), EXPLAIN LATER (brief confirmation)."""
                     
                     except Exception as e:
                         error_msg = f"Error executing {tool_name}: {str(e)}"
-                        print(f"{error_msg}")
                         
                         tool_results.append({
                             "tool": tool_name,
@@ -183,7 +186,16 @@ Remember: TAKE ACTION FIRST (call tools), EXPLAIN LATER (brief confirmation)."""
         }
     
     async def _execute_tool(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
-        if tool_name == "generate_image":
+        logger.info(f"Executing tool: {tool_name}, input_keys: {list(tool_input.keys())}")
+        
+        if tool_name == "analyze_image":
+            logger.info(f"analyze_image called with image_url: {tool_input.get('image_url', 'N/A')[:100]}")
+            result = await provider_manager.analyze_image(**tool_input)
+            logger.info(f"analyze_image completed, provider: {result.get('provider', 'unknown')}")
+            return result
+        
+        elif tool_name == "generate_image":
+            logger.info(f"generate_image called with provider: {tool_input.get('provider', 'default')}")
             return await provider_manager.generate_image(**tool_input)
         
         elif tool_name == "upscale_image":

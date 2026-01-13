@@ -2,18 +2,25 @@ import React, { useState } from 'react';
 import { X, Download, FileImage, FileType } from 'lucide-react';
 import Button from './ui/Button';
 
-const ExportDialog = ({ isOpen, onClose, onExport, objectName = 'object' }) => {
+const ExportDialog = ({ isOpen, onClose, onExport, objectName = 'object', isRasterImage = false }) => {
   const [format, setFormat] = useState('png');
   const [quality, setQuality] = useState(1);
   const [scale, setScale] = useState(2);
 
+  // Reset to PNG if SVG is selected but we have a raster image
+  React.useEffect(() => {
+    if (isRasterImage && format === 'svg') {
+      setFormat('png');
+    }
+  }, [isRasterImage, format]);
+
   if (!isOpen) return null;
 
   const formats = [
-    { value: 'png', label: 'PNG', icon: FileImage, description: 'Best for transparency' },
-    { value: 'jpg', label: 'JPG', icon: FileImage, description: 'Smaller file size' },
-    { value: 'svg', label: 'SVG', icon: FileType, description: 'Vector format' },
-    { value: 'webp', label: 'WebP', icon: FileImage, description: 'Modern web format' },
+    { value: 'png', label: 'PNG', icon: FileImage, description: 'Best for transparency', disabled: false },
+    { value: 'jpg', label: 'JPG', icon: FileImage, description: 'Smaller file size', disabled: false },
+    { value: 'svg', label: 'SVG', icon: FileType, description: isRasterImage ? 'Vectors only' : 'Vector format', disabled: isRasterImage },
+    { value: 'webp', label: 'WebP', icon: FileImage, description: 'Modern web format', disabled: false },
   ];
 
   const handleExport = () => {
@@ -111,29 +118,31 @@ const ExportDialog = ({ isOpen, onClose, onExport, objectName = 'object' }) => {
               </div>
             )}
 
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-gray-700 font-sans">
-                  Resolution Scale
-                </label>
-                <span className="text-xs font-semibold text-gray-900 font-sans">
-                  {scale}x
-                </span>
+            {format !== 'svg' && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-gray-700 font-sans">
+                    Resolution Scale
+                  </label>
+                  <span className="text-xs font-semibold text-gray-900 font-sans">
+                    {scale}x
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="4"
+                  step="1"
+                  value={scale}
+                  onChange={(e) => setScale(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-brand-primary"
+                />
+                <div className="flex justify-between text-[9px] text-gray-400 font-sans">
+                  <span>1x (Standard)</span>
+                  <span>4x (Ultra HD)</span>
+                </div>
               </div>
-              <input
-                type="range"
-                min="1"
-                max="4"
-                step="1"
-                value={scale}
-                onChange={(e) => setScale(parseInt(e.target.value))}
-                className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-brand-primary"
-              />
-              <div className="flex justify-between text-[9px] text-gray-400 font-sans">
-                <span>1x (Standard)</span>
-                <span>4x (Ultra HD)</span>
-              </div>
-            </div>
+            )}
 
             <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
               <div className="flex items-start gap-2">
@@ -143,7 +152,13 @@ const ExportDialog = ({ isOpen, onClose, onExport, objectName = 'object' }) => {
                     <span className="font-semibold">File:</span> {objectName}-{new Date().toISOString().slice(0, 10)}.{format}
                   </p>
                   <p className="text-[10px] text-gray-500 font-sans mt-1">
-                    Export will include only the selected object with transparent background {format !== 'jpg' ? '(PNG/WebP)' : 'with white background (JPG)'}.
+                    {format === 'svg' ? (
+                      'Exports as scalable vector graphics. Only available for vector objects.'
+                    ) : format === 'jpg' ? (
+                      'Exports with white background. Rasterized at selected scale.'
+                    ) : (
+                      'Exports with transparent background. Rasterized at selected scale.'
+                    )}
                   </p>
                 </div>
               </div>

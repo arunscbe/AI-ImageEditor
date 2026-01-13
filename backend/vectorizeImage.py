@@ -46,6 +46,4 @@ async def vectorize_image(image: UploadFile = File(...)):
     }
 
     response = requests.post(url, headers=headers, files=files)
-    print("Vectorize Response:", response.text)
-
     return response.json()

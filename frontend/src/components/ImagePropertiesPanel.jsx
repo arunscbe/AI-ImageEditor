@@ -15,9 +15,10 @@ import {
   replaceColorInImage,
 } from "../utils/colorExtractor";
 import EnhancedEraseRegionTool from "./EnhancedEraseRegionTool";
+import brandColors from "../assets/brand_colors.json";
 
 const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
-  const { selectedObject, canvas } = useStore();
+  const { selectedObject, canvas, colorMergeTolerance, setColorMergeTolerance, mergeColorsOnCanvas } = useStore();
   const [isColorOpen, setIsColorOpen] = useState(true);
   const [isEffectsOpen, setIsEffectsOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
@@ -124,20 +125,47 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
   }, [selectedObject]);
 
   // Extract colors for ANY object type (raster image, SVG, group, etc.)
+  // Initial color extraction when object is selected
   useEffect(() => {
     if (selectedObject) {
-      console.log(
-        "Extracting colors from object:",
-        selectedObject.type,
-        selectedObject
-      );
-      const colors = extractColorsFromImage(selectedObject, 8);
-      console.log("Extracted colors:", colors);
-      setExtractedColors(colors);
+      setColorMergeTolerance(0);
+      
+      const isVector = ['group', 'path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line', 'triangle'].includes(selectedObject.type);
+      
+      if (isVector) {
+        const colors = extractColorsFromImage(selectedObject);
+        setExtractedColors(colors);
+      } else {
+        setExtractedColors([]);
+      }
     } else {
       setExtractedColors([]);
     }
-  }, [selectedObject]);
+  }, [selectedObject, setColorMergeTolerance]);
+
+  // Apply color merging on canvas when tolerance changes
+  useEffect(() => {
+    if (selectedObject && colorMergeTolerance > 0) {
+      // Only apply for vector objects
+      const isVector = ['group', 'path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line', 'triangle'].includes(selectedObject.type);
+      
+      if (isVector) {
+        mergeColorsOnCanvas();
+        
+        setTimeout(() => {
+          const colors = extractColorsFromImage(selectedObject);
+          setExtractedColors(colors);
+        }, 100);
+      }
+    } else if (selectedObject && colorMergeTolerance === 0) {
+      // When tolerance is 0, just re-extract without merging
+      const isVector = ['group', 'path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line', 'triangle'].includes(selectedObject.type);
+      if (isVector) {
+        const colors = extractColorsFromImage(selectedObject);
+        setExtractedColors(colors);
+      }
+    }
+  }, [colorMergeTolerance, selectedObject, mergeColorsOnCanvas]);
 
   if (!selectedObject) return null;
 
@@ -276,6 +304,18 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
     }
   };
 
+  // Helper to get color by global index from grouped structure
+  const getColorByIndex = (index) => {
+    let currentIndex = 0;
+    for (const group of extractedColors) {
+      if (index < currentIndex + group.colors.length) {
+        return group.colors[index - currentIndex];
+      }
+      currentIndex += group.colors.length;
+    }
+    return null;
+  };
+
   const handleColorClick = (color, index) => {
     setSelectedColorIndex(index);
     setPickerColor(color.hex);
@@ -283,13 +323,15 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
   };
 
   const handleColorChange = (newColor) => {
-    if (selectedColorIndex !== null && extractedColors[selectedColorIndex]) {
-      const oldColor = extractedColors[selectedColorIndex].hex;
-      replaceColorInImage(selectedObject, oldColor, newColor, 60);
+    const selectedColor = getColorByIndex(selectedColorIndex);
+    
+    if (selectedColorIndex !== null && selectedColor) {
+      const oldColor = selectedColor.hex;
+      
+      replaceColorInImage(selectedObject, [oldColor], newColor);
 
-      // Re-extract colors after replacement to update the palette
       setTimeout(() => {
-        const colors = extractColorsFromImage(selectedObject, 8);
+        const colors = extractColorsFromImage(selectedObject);
         setExtractedColors(colors);
         setSelectedColorIndex(null);
         setShowColorPicker(false);
@@ -317,16 +359,18 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
     e.preventDefault();
 
     if (draggedColorIndex !== null && targetIndex !== draggedColorIndex) {
-      const sourceColor = extractedColors[draggedColorIndex].hex;
-      const targetColor = extractedColors[targetIndex].hex;
+      const sourceColor = getColorByIndex(draggedColorIndex);
+      const targetColor = getColorByIndex(targetIndex);
 
-      replaceColorInImage(selectedObject, targetColor, sourceColor, 60);
+      if (sourceColor && targetColor) {
+        replaceColorInImage(selectedObject, [targetColor.hex], sourceColor.hex);
 
-      // Re-extract colors after merge to update the palette
-      setTimeout(() => {
-        const colors = extractColorsFromImage(selectedObject, 8);
-        setExtractedColors(colors);
-      }, 100);
+        // Re-extract colors after merge to update the palette
+        setTimeout(() => {
+          const colors = extractColorsFromImage(selectedObject);
+          setExtractedColors(colors);
+        }, 100);
+      }
     }
 
     setDraggedColorIndex(null);
@@ -412,45 +456,74 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
             }`}
           >
             <div className="px-2.5 pb-2.5">
-              <p className="text-[10px] text-gray-500 mb-1.5 font-sans">
+              <p className="text-[10px] text-gray-500 mb-1 font-sans">
                 Click to edit • Drag to merge colors
               </p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {extractedColors.map((color, index) => (
-                  <button
-                    key={index}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onClick={() => handleColorClick(color, index)}
-                    className={`group relative aspect-square rounded-md border-2 transition-all duration-150 hover:scale-105 cursor-move ${
-                      selectedColorIndex === index
-                        ? "border-brand-primary ring-2 ring-brand-primary/20"
-                        : draggedColorIndex === index
-                        ? "border-gray-400 opacity-50 scale-95"
-                        : dropTargetIndex === index
-                        ? "border-brand-primary ring-2 ring-brand-primary/30 scale-110"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    style={{ backgroundColor: color.hex }}
-                    title={`${color.hex} - Drag to merge`}
-                  >
-                    <div className="absolute inset-0 rounded-md bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                      {selectedColorIndex === index && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-white shadow-md"></div>
-                      )}
-                      {dropTargetIndex === index &&
-                        draggedColorIndex !== null &&
-                        draggedColorIndex !== index && (
-                          <div className="text-white font-bold text-[10px] bg-brand-primary rounded-full w-4 h-4 flex items-center justify-center">
-                            ↓
+              
+              {/* Color Merge Tolerance Slider */}
+              <div className="mb-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-gray-600 font-medium">
+                    Merge Similar Colors
+                  </label>
+                  <span className="text-[9px] text-gray-500 font-mono">
+                    {colorMergeTolerance === 0 ? 'Off' : `±${colorMergeTolerance}`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  step="5"
+                  value={colorMergeTolerance}
+                  onChange={(e) => setColorMergeTolerance(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-brand-primary"
+                />
+              </div>
+              
+              <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-1">
+                {extractedColors.map((group, groupIndex) => (
+                  <div key={groupIndex} className="grid grid-cols-6 gap-1.5">
+                    {group.colors.map((color, colorIndex) => {
+                      const globalIndex = extractedColors.slice(0, groupIndex).reduce((acc, g) => acc + g.colors.length, 0) + colorIndex;
+                      return (
+                        <button
+                          key={colorIndex}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, globalIndex)}
+                          onDragOver={(e) => handleDragOver(e, globalIndex)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, globalIndex)}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => handleColorClick(color, globalIndex)}
+                          className={`group relative aspect-square rounded-md border-2 transition-all duration-150 hover:scale-105 cursor-move ${
+                            selectedColorIndex === globalIndex
+                              ? "border-brand-primary ring-2 ring-brand-primary/20"
+                              : draggedColorIndex === globalIndex
+                              ? "border-gray-400 opacity-50 scale-95"
+                              : dropTargetIndex === globalIndex
+                              ? "border-brand-primary ring-2 ring-brand-primary/30 scale-110"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                          style={{ backgroundColor: color.hex }}
+                          title={`${color.hex} - Drag to merge`}
+                        >
+                          <div className="absolute inset-0 rounded-md bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                            {selectedColorIndex === globalIndex && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-white shadow-md"></div>
+                            )}
+                            {dropTargetIndex === globalIndex &&
+                              draggedColorIndex !== null &&
+                              draggedColorIndex !== globalIndex && (
+                                <div className="text-white font-bold text-[10px] bg-brand-primary rounded-full w-4 h-4 flex items-center justify-center">
+                                  ↓
+                                </div>
+                              )}
                           </div>
-                        )}
-                    </div>
-                  </button>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
 
@@ -458,7 +531,7 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
                 <div className="flex flex-col gap-2 p-2 mt-2 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-gray-700 font-sans">
-                      Replace Color
+                      Replace with Brand Color
                     </span>
                     <button
                       onClick={() => {
@@ -467,15 +540,14 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
                       }}
                       className="text-[10px] text-gray-500 hover:text-gray-700 font-sans"
                     >
-                      Done
+                      Cancel
                     </button>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mb-2">
                     <div
-                      className="w-8 h-8 rounded-md border-2 border-gray-300"
+                      className="w-6 h-6 rounded-md border-2 border-gray-300"
                       style={{
-                        backgroundColor:
-                          extractedColors[selectedColorIndex].hex,
+                        backgroundColor: getColorByIndex(selectedColorIndex)?.hex || '#000000',
                       }}
                     />
                     <svg
@@ -489,25 +561,20 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
                       <line x1="5" y1="12" x2="19" y2="12"></line>
                       <polyline points="12 5 19 12 12 19"></polyline>
                     </svg>
-                    <input
-                      type="color"
-                      value={pickerColor}
-                      onChange={(e) => handleColorChange(e.target.value)}
-                      className="w-8 h-8 rounded-md border-2 border-brand-primary cursor-pointer"
-                    />
-                    <input
-                      type="text"
-                      value={pickerColor}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setPickerColor(value);
-                        if (/^#[0-9A-F]{6}$/i.test(value)) {
-                          handleColorChange(value);
-                        }
-                      }}
-                      className="flex-1 px-1.5 py-1 text-[10px] font-mono border border-gray-200 rounded-md focus:outline-none focus:border-brand-primary"
-                      placeholder="#000000"
-                    />
+                    <span className="text-xs text-gray-600 font-sans">Select brand color:</span>
+                  </div>
+                  <div className="grid grid-cols-8 gap-1 max-h-[200px] overflow-y-auto pr-1">
+                    {brandColors
+                      .filter(color => color.hexvalue !== '#00000000')
+                      .map((color, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleColorChange(color.hexvalue)}
+                        className="w-full aspect-square rounded border-2 border-transparent hover:border-brand-primary transition-all hover:scale-110"
+                        style={{ backgroundColor: color.hexvalue }}
+                        title={color.name}
+                      />
+                    ))}
                   </div>
                 </div>
               )}

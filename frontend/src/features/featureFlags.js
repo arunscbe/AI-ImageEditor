@@ -67,7 +67,7 @@ export const saveFlags = (flags) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(flags));
   } catch (error) {
-    console.error('Failed to save feature flags:', error);
+    // Failed to save feature flags
   }
 };
 

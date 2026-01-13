@@ -141,10 +141,6 @@ const IntentSelector = () => {
   const { uuid } = useParams();
 
   const handleIntentSelect = (intent) => {
-    console.log('Intent selected:', intent);
-    console.log('Current UUID:', uuid);
-    console.log('Navigating to:', `/project/${uuid}`);
-    
     const serializableIntent = {
       id: intent.id,
       title: intent.title,
@@ -153,15 +149,11 @@ const IntentSelector = () => {
       canvasSetup: intent.canvasSetup,
     };
     
-    console.log('With state:', { intent: serializableIntent });
-    
     try {
       navigate(`/project/${uuid}`, {
         state: { intent: serializableIntent },
       });
-      console.log('Navigation called successfully');
     } catch (error) {
-      console.error('Navigation error:', error);
       alert(`Navigation error: ${error.message}`);
     }
   };

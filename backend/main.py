@@ -5,6 +5,14 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, List
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 from generateImage import router as generateImage_router
 from removeBG import router as removeBG_router
 from vectorizeImage import router as vectorize_router
@@ -27,11 +35,9 @@ def get_orchestrator_instance():
         if ORCHESTRATOR_TYPE == "claude":
             from orchestrator.llm_orchestrator import get_orchestrator
             orchestrator = get_orchestrator()
-            print("Using Claude orchestrator")
         elif ORCHESTRATOR_TYPE == "openai":
             from orchestrator.openai_orchestrator import get_openai_orchestrator
             orchestrator = get_openai_orchestrator()
-            print("Using OpenAI orchestrator")
         else:
             raise ValueError(f"Invalid ORCHESTRATOR_TYPE: {ORCHESTRATOR_TYPE}. Use 'claude' or 'openai'")
     return orchestrator
@@ -103,13 +109,19 @@ class ChatResponse(BaseModel):
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
+        logger.info(f"Chat request received - conversation_id: {request.conversation_id}")
+        logger.debug(f"Message: {request.message[:200]}")
+        
         orch = get_orchestrator_instance()
         result = await orch.process_message(
             message=request.message,
             conversation_id=request.conversation_id
         )
+        
+        logger.info(f"Chat response - actions: {result.get('actions_taken', [])}, images: {len(result.get('images', []))}")
         return ChatResponse(**result)
     except Exception as e:
+        logger.error(f"Chat endpoint error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -119,7 +131,7 @@ async def upload_canvas_image(image: UploadFile = File(...)):
         contents = await image.read()
         pil_image = Image.open(BytesIO(contents))
         
-        filepath = save_pil_image(pil_image, prefix="canvas_upload")
+        filepath = save_pil_image(pil_image, prefix="upload_")
         image_url = get_image_url(filepath)
         
         return {
@@ -129,6 +141,63 @@ async def upload_canvas_image(image: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+
+@app.post("/ingest/upload")
+async def ingest_upload(
+    file: UploadFile = File(...),
+    vectorize: bool = True
+):
+    """
+    Upload and process a file (PNG/JPG/PDF/AI)
+    Automatically routes to appropriate processing:
+    - PNG/JPG → Optional Recraft vectorization
+    - PDF/AI → Inkscape conversion to SVG
+    """
+    try:
+        from services.ingestion_service import ingestion_service
+        
+        file_data = await file.read()
+        
+        result = await ingestion_service.process_upload(
+            file_data=file_data,
+            filename=file.filename,
+            vectorize=vectorize
+        )
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+@app.post("/analyze-image")
+async def analyze_image(request: dict):
+    """
+    Analyze an image to determine quality and recommend processing workflow.
+    
+    Request body:
+    {
+        "image_url": "https://example.com/image.png",
+        "provider": "gemini"  // optional, defaults to gemini
+    }
+    
+    Returns analysis with recommendations for upscaling, vectorization, etc.
+    """
+    try:
+        image_url = request.get("image_url")
+        if not image_url:
+            raise HTTPException(status_code=400, detail="image_url is required")
+        
+        provider = request.get("provider", "gemini")
+        
+        result = await provider_manager.analyze_image(
+            image_url=image_url,
+            provider=provider
+        )
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @app.get("/providers")
