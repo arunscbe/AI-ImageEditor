@@ -141,10 +141,6 @@ const IntentSelector = () => {
   const { uuid } = useParams();
 
   const handleIntentSelect = (intent) => {
-    console.log('Intent selected:', intent);
-    console.log('Current UUID:', uuid);
-    console.log('Navigating to:', `/project/${uuid}`);
-    
     const serializableIntent = {
       id: intent.id,
       title: intent.title,
@@ -153,25 +149,21 @@ const IntentSelector = () => {
       canvasSetup: intent.canvasSetup,
     };
     
-    console.log('With state:', { intent: serializableIntent });
-    
     try {
       navigate(`/project/${uuid}`, {
         state: { intent: serializableIntent },
       });
-      console.log('Navigation called successfully');
     } catch (error) {
-      console.error('Navigation error:', error);
       alert(`Navigation error: ${error.message}`);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <Logo height={36} />
+            <Logo height={32} />
             <Button
               variant="ghost"
               size="sm"
@@ -184,17 +176,17 @@ const IntentSelector = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-heading font-bold text-gray-900 mb-3">
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
             What are you working on?
           </h1>
-          <p className="text-lg text-gray-600 font-sans">
+          <p className="text-base text-gray-600 font-sans">
             Choose a workflow. We'll handle the rest.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {INTENT_TEMPLATES.map((intent) => {
             const IconComponent = intent.icon;
             const isDisabled = intent.disabled;
@@ -204,46 +196,46 @@ const IntentSelector = () => {
                 key={intent.id}
                 onClick={() => !isDisabled && handleIntentSelect(intent)}
                 disabled={isDisabled}
-                className={`group relative bg-white rounded-2xl p-6 border-2 transition-all duration-200 text-left ${
+                className={`group relative bg-white rounded-xl p-4 border-2 transition-all duration-150 text-left ${
                   isDisabled
                     ? 'border-gray-200 opacity-60 cursor-not-allowed'
-                    : 'border-gray-200 hover:border-brand-primary hover:shadow-xl cursor-pointer'
+                    : 'border-gray-200 hover:border-brand-primary hover:shadow-lg cursor-pointer'
                 }`}
               >
                 {isDisabled && (
-                  <div className="absolute top-4 right-4">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                  <div className="absolute top-3 right-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600">
                       Coming Soon
                     </span>
                   </div>
                 )}
                 
-                <div className="flex items-start gap-4 mb-4">
-                  <div className={`w-14 h-14 rounded-xl border flex items-center justify-center transition-all duration-200 ${
+                <div className="flex items-start gap-3 mb-3">
+                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-150 ${
                     isDisabled
-                      ? 'bg-gray-50 border-gray-200'
-                      : 'bg-red-50 border-red-100 group-hover:bg-red-100 group-hover:border-brand-primary'
+                      ? 'bg-gray-50'
+                      : 'bg-red-50 group-hover:bg-red-100'
                   }`}>
                     <IconComponent 
                       className={isDisabled ? 'text-gray-400' : 'text-brand-primary'} 
-                      size={26} 
+                      size={22} 
                     />
                   </div>
                   <div className="flex-1">
-                    <h3 className={`font-heading text-lg font-bold mb-2 transition-colors ${
+                    <h3 className={`font-heading text-base font-bold mb-1 transition-colors ${
                       isDisabled
                         ? 'text-gray-500'
                         : 'text-gray-900 group-hover:text-brand-primary'
                     }`}>
                       {intent.title}
                     </h3>
-                    <p className={`text-sm leading-relaxed mb-3 ${
+                    <p className={`text-xs leading-snug mb-2 font-sans ${
                       isDisabled ? 'text-gray-400' : 'text-gray-600'
                     }`}>
                       {intent.description}
                     </p>
                     {intent.workflow && (
-                      <ul className={`text-xs space-y-1 ${
+                      <ul className={`text-xs space-y-0.5 font-sans ${
                         isDisabled ? 'text-gray-400' : 'text-gray-500'
                       }`}>
                         {intent.workflow.slice(0, 3).map((step, idx) => (
@@ -256,21 +248,21 @@ const IntentSelector = () => {
                         ))}
                         {intent.workflow.length > 3 && (
                           <li className="text-gray-400 ml-3.5">
-                            +{intent.workflow.length - 3} more steps
+                            +{intent.workflow.length - 3} more
                           </li>
                         )}
                       </ul>
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-1.5 flex-wrap">
                   {intent.tags.map((tag) => (
                     <span
                       key={tag}
-                      className={`text-xs px-3 py-1 rounded-full border font-medium ${
+                      className={`text-xs px-2 py-0.5 rounded-lg font-medium font-sans ${
                         isDisabled
-                          ? 'bg-gray-50 text-gray-400 border-gray-200'
-                          : 'bg-gray-50 text-gray-600 border-gray-200'
+                          ? 'bg-gray-50 text-gray-400'
+                          : 'bg-gray-50 text-gray-600'
                       }`}
                     >
                       {tag}
@@ -282,8 +274,8 @@ const IntentSelector = () => {
           })}
         </div>
 
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500">
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-500 font-sans">
             More workflows coming soon
           </p>
         </div>

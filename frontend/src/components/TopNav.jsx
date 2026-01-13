@@ -24,10 +24,12 @@ import {
   Share2,
   Wand2,
   Settings,
+  Download,
 } from "lucide-react";
 
 import MenuItem from "./ui/MenuItem";
 import FeatureFlagsPanel from "./FeatureFlagsPanel";
+import ExportDialog from "./ExportDialog";
 import useFeatureFlagStore from "../features/useFeatureFlag";
 import { FEATURES } from "../features/featureFlags";
 
@@ -40,24 +42,38 @@ const TopNav = () => {
     selectedObject,
     forRemovingBG,
     vectorizeAPI,
+    upscaleImage,
+    handleExport,
+    isExportDialogOpen,
+    setExportDialogOpen,
   } = useStore();
 
   const { isEnabled } = useFeatureFlagStore();
   const [showFeatureFlags, setShowFeatureFlags] = useState(false);
 
   const isImageSelected = selectedObject?.type === "image";
+  const hasSelection = selectedObject !== null;
+
+  const handleExportClick = () => {
+    if (!hasSelection) {
+      alert('Please select an object to export');
+      return;
+    }
+    setExportDialogOpen(true);
+  };
 
   return (
-    <header className="h-16 bg-white flex items-center justify-between px-6 z-20 relative border-b border-gray-200 shadow-sm">
-      <div className="flex items-center gap-6">
-        <Logo />
+    <header className="h-14 bg-white flex items-center justify-between px-4 z-20 relative border-b border-gray-200">
+      <div className="flex items-center gap-4">
+        <Logo height={28} />
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-1.5">
+          {/* Insert button removed for cleaner cosmetics */}
+          {/*<div className="relative">
             <Button
               variant="ghost"
               size="sm"
-              className={`gap-1.5 font-sans font-medium ${
+              className={`gap-1 font-sans font-medium ${
                 isInsertOpen ? "bg-gray-100 text-brand-dark" : ""
               }`}
               onClick={toggleInsertMenu}
@@ -66,12 +82,10 @@ const TopNav = () => {
               Insert
             </Button>
 
-            {/* Dropdown Menu */}
             {isInsertOpen && (
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-100 text-left">
-                {/* Generation Section */}
-                <div className="px-3 py-2">
-                  <h3 className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">
+              <div className="absolute top-full left-0 mt-1.5 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-left">
+                <div className="px-2.5 py-1.5">
+                  <h3 className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider font-sans">
                     Generation
                   </h3>
                   <div className="flex flex-col gap-0.5">
@@ -93,11 +107,10 @@ const TopNav = () => {
                   </div>
                 </div>
 
-                <div className="h-px bg-gray-100 mx-3 my-1" />
+                <div className="h-px bg-gray-200 mx-2.5 my-1" />
 
-                {/* Other Tools Section */}
-                <div className="px-3 py-2">
-                  <h3 className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">
+                <div className="px-2.5 py-1.5">
+                  <h3 className="text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider font-sans">
                     Other tools
                   </h3>
                   <div className="flex flex-col gap-0.5">
@@ -110,12 +123,20 @@ const TopNav = () => {
                       />
                     )}
                     {isEnabled(FEATURES.BRUSH_TOOL) && (
-                      <MenuItem
-                        icon={Brush}
-                        label="Brush"
-                        shortcut="B"
-                        onClick={() => handleCanvasAction("TOGGLE_BRUSH")}
-                      />
+                      <>
+                        <MenuItem
+                          icon={Brush}
+                          label="Brush"
+                          shortcut="B"
+                          onClick={() => handleCanvasAction("TOGGLE_BRUSH")}
+                        />
+                        <MenuItem
+                          icon={Eraser}
+                          label="Eraser"
+                          shortcut="E"
+                          onClick={() => handleCanvasAction("TOGGLE_ERASER")}
+                        />
+                      </>
                     )}
                     {isEnabled(FEATURES.SHAPES_TOOLS) && (
                       <>
@@ -150,14 +171,14 @@ const TopNav = () => {
                 </div>
               </div>
             )}
-          </div>
+          </div> */}
 
           {isEnabled(FEATURES.TEMPLATES_MENU) && (
             <Button
               variant="ghost"
               size="sm"
               endIcon={ChevronDown}
-              className="gap-1.5"
+              className="gap-1"
             >
               Templates
             </Button>
@@ -172,19 +193,18 @@ const TopNav = () => {
         </div>
       </div>
 
-      {/* Center: Image Editing Actions OR Project Title */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         {isImageSelected ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             {isEnabled(FEATURES.REMOVE_BACKGROUND) && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="flex-col gap-0.5 h-auto py-1.5 px-3 text-gray-600 hover:text-gray-900"
+                className="flex-col gap-0.5 h-auto py-1 px-2.5 text-gray-600 hover:text-gray-900"
                 onClick={() => forRemovingBG()}
               >
-                <Eraser size={18} />
-                <span className="text-[10px] font-medium text-gray-400">
+                <Eraser size={16} />
+                <span className="text-[9px] font-medium text-gray-400 font-sans">
                   Remove bg
                 </span>
               </Button>
@@ -193,11 +213,11 @@ const TopNav = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="flex-col gap-0.5 h-auto py-1.5 px-3 text-gray-600 hover:text-gray-900"
+                className="flex-col gap-0.5 h-auto py-1 px-2.5 text-gray-600 hover:text-gray-900"
                 onClick={() => vectorizeAPI()}
               >
-                <Share2 size={18} />
-                <span className="text-[10px] font-medium text-gray-400">
+                <Share2 size={16} />
+                <span className="text-[9px] font-medium text-gray-400 font-sans">
                   Vectorize
                 </span>
               </Button>
@@ -206,11 +226,11 @@ const TopNav = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="flex-col gap-0.5 h-auto py-1.5 px-3 text-gray-600 hover:text-gray-900"
-                onClick={() => console.log("Crisp Upscale")}
+                className="flex-col gap-0.5 h-auto py-1 px-2.5 text-gray-600 hover:text-gray-900"
+                onClick={() => upscaleImage()}
               >
-                <Wand2 size={18} />
-                <span className="text-[10px] font-medium text-gray-400">
+                <Wand2 size={16} />
+                <span className="text-[9px] font-medium text-gray-400 font-sans">
                   Crisp upscale
                 </span>
               </Button>
@@ -220,16 +240,27 @@ const TopNav = () => {
           <Button
             variant="secondary"
             size="sm"
-            className="bg-gray-100/80 hover:bg-gray-200/80 text-gray-600 hover:text-gray-900 font-semibold gap-2"
+            className="bg-gray-100/80 hover:bg-gray-200/80 text-gray-600 hover:text-gray-900 font-semibold gap-1.5 font-heading"
             endIcon={ChevronDown}
           >
-            Untitled
+            Workspace 1
           </Button>
         )}
       </div>
 
-      {/* Right: Credits & Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        {hasSelection && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            icon={Download}
+            className="font-sans font-semibold"
+            onClick={handleExportClick}
+          >
+            Export
+          </Button>
+        )}
+
         {isEnabled(FEATURES.SHARE_BUTTON) && (
           <Button variant="primary" size="sm" className="font-sans font-semibold">
             Share
@@ -243,7 +274,7 @@ const TopNav = () => {
           className="rounded-lg text-gray-500 hover:text-gray-700"
           title="Feature Flags"
         >
-          <Settings size={18} />
+          <Settings size={16} />
         </Button>
 
         <Button
@@ -251,7 +282,7 @@ const TopNav = () => {
           size="icon"
           className="rounded-lg text-gray-500 hover:text-gray-700"
         >
-          <User size={18} />
+          <User size={16} />
         </Button>
       </div>
 
@@ -265,6 +296,14 @@ const TopNav = () => {
       {showFeatureFlags && (
         <FeatureFlagsPanel onClose={() => setShowFeatureFlags(false)} />
       )}
+
+      <ExportDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onExport={handleExport}
+        objectName={selectedObject?.name || selectedObject?.type || 'object'}
+        isRasterImage={selectedObject?.type === 'image'}
+      />
     </header>
   );
 };

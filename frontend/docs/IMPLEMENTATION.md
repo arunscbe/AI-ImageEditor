@@ -51,8 +51,8 @@ This documentation tracks what has been built, what remains, and our strategic d
 | Text → Image Generation | `/v1/images/generations` | ✅ Implemented |
 | Background Removal | `/v1/images/removeBackground` | ✅ Implemented |
 | Image Vectorization | `/v1/images/vectorize` | ✅ Implemented |
-| Crisp Upscale | `/v1/images/upscale` | 🔲 API Available |
-| Creative Upscale | `/v1/images/upscale` | 🔲 API Available |
+| Crisp Upscale | `/v1/images/crispUpscale` | ✅ Implemented |
+| Creative Upscale | `/v1/images/creativeUpscale` | 🔲 API Available |
 | Erase Region (Mask-based) | `/v1/images/erase` | 🔲 API Available |
 | Image → Image (Modifications) | `/v1/images/generations` | 🔲 API Available |
 | Style Creation | `/v1/styles` | 🔲 API Available |
@@ -160,7 +160,15 @@ This documentation tracks what has been built, what remains, and our strategic d
    - **Integration**: Direct Recraft API proxy with PIL preprocessing
    - **Status**: ✅ Production Ready
 
-4. **API Infrastructure**
+4. **Image Upscaling** (`/upscale`)
+   - **File**: `backend/upscaleImage.py`
+   - **Endpoint**: `/images/crispUpscale`
+   - **Accepts**: Image file upload (PNG/JPG/WEBP, max 5MB, max 4MP resolution)
+   - **Returns**: Upscaled image URL (higher resolution)
+   - **Integration**: Direct Recraft API proxy
+   - **Status**: ✅ Production Ready
+
+5. **API Infrastructure**
    - **File**: `backend/main.py`
    - **Framework**: FastAPI
    - **CORS**: Enabled for frontend development
@@ -193,7 +201,8 @@ This documentation tracks what has been built, what remains, and our strategic d
    - **Text Tool**: Editable IText objects with Inter font
    - **Shapes**: Rectangle, Circle, Line, Arrow (grouped)
    - **Image Upload**: Direct canvas placement
-   - **Brush Tool**: Flag enabled, implementation pending
+   - **Brush Tool**: Free drawing with PencilBrush (adjustable size 1-100px, color picker)
+   - **Eraser Tool**: White brush for erasing (shares size control with brush)
    - **Status**: ✅ Core Tools Complete
 
 4. **AI Integration (Frontend)**
@@ -208,6 +217,11 @@ This documentation tracks what has been built, what remains, and our strategic d
      - Store method: `vectorizeAPI()`
      - SVG loading via Fabric.js
      - Maintains exact positioning
+   - **Image Upscaling**:
+     - Store method: `upscaleImage()`
+     - UI: TopNav button (when image selected)
+     - Preserves object placement and scale
+     - Increases resolution while maintaining display size
    - **Status**: ✅ Production Ready
 
 5. **Properties Panels**
@@ -240,7 +254,7 @@ This documentation tracks what has been built, what remains, and our strategic d
      - ✅ AI Image Generation
      - ✅ Remove Background
      - ✅ Vectorize Image
-     - 🔲 Crisp Upscale
+     - ✅ Crisp Upscale
      - ✅ Brush Tool
      - ✅ Layers Panel
      - ✅ Upload Image
@@ -289,12 +303,11 @@ This documentation tracks what has been built, what remains, and our strategic d
    - **Estimate**: 5-7 days
    - **Notes**: Required for `eraseRegion` endpoint
 
-4. **Image Upscaling Integration**
-   - **API**: Recraft crisp/creative upscale
-   - **Backend**: New route in FastAPI
-   - **Frontend**: UI trigger + result handling
-   - **Complexity**: Low
-   - **Estimate**: 1 day
+4. **Creative Upscale Integration**
+   - **API**: Recraft creative upscale (`/images/creativeUpscale`)
+   - **Difference**: Focuses on refining small details and faces
+   - **Complexity**: Low (similar to crisp upscale)
+   - **Estimate**: 1 hour (reuse existing code)
 
 5. **Style Creation Integration**
    - **API**: Recraft style creation
@@ -433,6 +446,7 @@ backend/
 ├── generateImage.py     # Text → Image generation
 ├── removeBG.py          # Background removal
 ├── vectorizeImage.py    # Raster → Vector conversion
+├── upscaleImage.py      # Image upscaling (crisp)
 ├── requirements.txt     # Python dependencies
 └── test.py             # Test utilities
 ```
