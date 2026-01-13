@@ -380,7 +380,7 @@ const useStore = create((set, get) => ({
     }
   },
   vectorizeAPI: async () => {
-    const { canvas, selectedObject, updateLayers, setProcessing } = get();
+    const { canvas, selectedObject, updateLayers, setProcessing, getNextPosition, focusObject, incrementObjectCount } = get();
 
     if (!selectedObject || selectedObject.type !== "image") {
       alert("Please select an image first.");
@@ -390,16 +390,6 @@ const useStore = create((set, get) => ({
     setProcessing(true, "Vectorizing image...");
 
     try {
-      const placement = {
-        left: selectedObject.left,
-        top: selectedObject.top,
-        angle: selectedObject.angle,
-        originX: selectedObject.originX,
-        originY: selectedObject.originY,
-        flipX: selectedObject.flipX,
-        flipY: selectedObject.flipY,
-      };
-
       const prevW = selectedObject.getScaledWidth();
       const prevH = selectedObject.getScaledHeight();
 
@@ -431,15 +421,28 @@ const useStore = create((set, get) => ({
       const naturalW = svg.width || svg.getScaledWidth();
       const naturalH = svg.height || svg.getScaledHeight();
 
-      if (naturalW && naturalH) {
-        svg.scaleX = prevW / naturalW;
-        svg.scaleY = prevH / naturalH;
-      }
-      svg.set({ ...placement });
+      // Get position for new object (next to existing objects)
+      const pos = getNextPosition();
 
-      canvas.remove(selectedObject);
+      if (naturalW && naturalH) {
+        // Use uniform scaling to maintain aspect ratio
+        const scale = Math.min(prevW / naturalW, prevH / naturalH);
+        svg.scaleX = scale;
+        svg.scaleY = scale;
+      }
+      
+      svg.set({
+        left: pos.left,
+        top: pos.top,
+        originX: "left",
+        originY: "center",
+      });
+
+      // Add as new object (don't remove the original)
       canvas.add(svg);
       canvas.setActiveObject(svg);
+      focusObject(svg);
+      incrementObjectCount();
       canvas.renderAll();
       updateLayers();
     } catch (error) {

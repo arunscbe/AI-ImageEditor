@@ -422,6 +422,136 @@ class RecraftProvider(BaseImageProvider):
         
         return svg_content
     
+    def _flatten_gradients(self, svg_content: str) -> str:
+        """
+        Remove gradients and replace with solid colors to reduce color count
+        
+        Args:
+            svg_content: SVG XML content as string
+        
+        Returns:
+            SVG content with gradients replaced by solid colors
+        """
+        import re
+        
+        # Step 1: Extract gradient definitions and their colors
+        gradient_map = {}
+        
+        # Find all gradient definitions (linear and radial)
+        gradient_pattern = r'<(?:linear|radial)Gradient[^>]*id="([^"]+)"[^>]*>(.*?)</(?:linear|radial)Gradient>'
+        
+        for match in re.finditer(gradient_pattern, svg_content, re.DOTALL):
+            gradient_id = match.group(1)
+            gradient_content = match.group(2)
+            
+            # Extract stop colors from this gradient
+            stop_colors = re.findall(r'stop-color="([^"]+)"', gradient_content)
+            
+            if stop_colors:
+                # Use the first color as the solid replacement
+                # (Could also average them, but first color is simpler and faster)
+                solid_color = stop_colors[0]
+                gradient_map[gradient_id] = solid_color
+        
+        # Step 2: Remove all gradient definitions from defs section
+        svg_content = re.sub(
+            r'<defs>.*?</defs>',
+            '<defs></defs>',
+            svg_content,
+            flags=re.DOTALL
+        )
+        
+        # Step 3: Replace gradient references with solid colors
+        for gradient_id, color in gradient_map.items():
+            # Replace fill references
+            svg_content = re.sub(
+                rf'fill="url\(#{re.escape(gradient_id)}\)"',
+                f'fill="{color}"',
+                svg_content
+            )
+            # Replace stroke references
+            svg_content = re.sub(
+                rf'stroke="url\(#{re.escape(gradient_id)}\)"',
+                f'stroke="{color}"',
+                svg_content
+            )
+        
+        return svg_content
+    
+    def _quantize_svg_colors(self, svg_content: str, max_colors: int = 10) -> str:
+        """
+        Reduce the number of colors in SVG by quantizing similar colors.
+        Uses k-means clustering in LAB color space for perceptual similarity.
+        
+        Args:
+            svg_content: SVG XML content as string
+            max_colors: Maximum number of colors to keep (default: 10)
+        
+        Returns:
+            SVG content with quantized colors
+        """
+        import re
+        import numpy as np
+        from sklearn.cluster import KMeans
+        from skimage import color as skcolor
+        
+        # Extract all unique colors from the SVG (fill and stroke)
+        fill_pattern = r'fill="(#[0-9A-Fa-f]{6})"'
+        stroke_pattern = r'stroke="(#[0-9A-Fa-f]{6})"'
+        
+        fill_colors = set(re.findall(fill_pattern, svg_content))
+        stroke_colors = set(re.findall(stroke_pattern, svg_content))
+        colors = fill_colors.union(stroke_colors)
+        
+        if len(colors) <= max_colors:
+            return svg_content  # Already within limit
+        
+        # Convert hex colors to RGB (0-1 range)
+        rgb_colors = []
+        color_list = list(colors)
+        for hex_color in color_list:
+            r = int(hex_color[1:3], 16) / 255.0
+            g = int(hex_color[3:5], 16) / 255.0
+            b = int(hex_color[5:7], 16) / 255.0
+            rgb_colors.append([r, g, b])
+        
+        # Convert RGB to LAB (perceptually uniform color space)
+        rgb_array = np.array(rgb_colors).reshape(-1, 1, 3)
+        lab_colors = skcolor.rgb2lab(rgb_array).reshape(-1, 3)
+        
+        # Cluster colors using k-means
+        n_clusters = min(max_colors, len(colors))
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+        kmeans.fit(lab_colors)
+        
+        # Get cluster centers and convert back to RGB
+        cluster_centers_lab = kmeans.cluster_centers_
+        cluster_centers_rgb = skcolor.lab2rgb(
+            cluster_centers_lab.reshape(-1, 1, 3)
+        ).reshape(-1, 3)
+        
+        # Create color mapping (old hex -> new hex)
+        color_map = {}
+        for i, hex_color in enumerate(color_list):
+            cluster_idx = kmeans.labels_[i]
+            r, g, b = cluster_centers_rgb[cluster_idx]
+            # Clamp values to 0-1 range and convert to hex
+            r = max(0, min(1, r))
+            g = max(0, min(1, g))
+            b = max(0, min(1, b))
+            new_hex = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+            color_map[hex_color] = new_hex
+        
+        # Replace colors in SVG
+        result = svg_content
+        for old_color, new_color in color_map.items():
+            # Replace fill colors
+            result = result.replace(f'fill="{old_color}"', f'fill="{new_color}"')
+            # Replace stroke colors
+            result = result.replace(f'stroke="{old_color}"', f'stroke="{new_color}"')
+        
+        return result
+    
     async def vectorize_image(
         self,
         image_url: str,
@@ -479,12 +609,28 @@ class RecraftProvider(BaseImageProvider):
             svg_response.raise_for_status()
             svg_content = svg_response.text
             
+            # Fix preserveAspectRatio="none" issue
+            import re
+            # Remove preserveAspectRatio="none" or replace with proper value
+            svg_content = re.sub(
+                r'preserveAspectRatio\s*=\s*["\']none["\']',
+                'preserveAspectRatio="xMidYMid meet"',
+                svg_content,
+                flags=re.IGNORECASE
+            )
+            
+            # Flatten gradients to solid colors (reduces color count dramatically)
+            svg_content = self._flatten_gradients(svg_content)
+            
             # Normalize colors to brand colors
             normalized_svg = self._normalize_svg_colors(svg_content)
             
-            # Save normalized SVG
+            # Quantize colors to reduce similar colors (keeps ~10 distinct colors)
+            # quantized_svg = self._quantize_svg_colors(normalized_svg, max_colors=10)
+            
+            # Save quantized SVG
             from utils.image_storage import save_svg_content, get_image_url
-            filepath = save_svg_content(svg_content.encode('utf-8'), prefix="final_")
+            filepath = save_svg_content(normalized_svg.encode('utf-8'), prefix="final_")
             normalized_svg_url = get_image_url(filepath)
             
             return self.normalize_response({
