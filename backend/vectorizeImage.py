@@ -1,15 +1,10 @@
 from fastapi import APIRouter, UploadFile, File
-import requests
 from PIL import Image
 from io import BytesIO
-import os
-from dotenv import load_dotenv
+from utils.image_storage import save_uploaded_file, get_image_url
+from services.image_operations import image_operations
 
-load_dotenv()
 router = APIRouter()
-
-API_KEY = os.getenv("RECRAFT_API_KEY")
-BASE_URL = os.getenv("RECRAFT_URL")  # https://external.api.recraft.ai/v1
 
 def ensure_min_size(image_bytes):
     img = Image.open(BytesIO(image_bytes))
@@ -32,18 +27,34 @@ def ensure_min_size(image_bytes):
 
 @router.post("/vectorizeImage")
 async def vectorize_image(image: UploadFile = File(...)):
-    url = f"{BASE_URL}/images/vectorize"
-
+    """
+    Vectorize an uploaded image using the provider system.
+    This ensures gradient flattening and color normalization are applied.
+    """
+    # Read and resize image
     original_bytes = await image.read()
     resized_bytes = ensure_min_size(original_bytes)
-
-    headers = {
-        "Authorization": f"Bearer {API_KEY}"    
-    }
-
-    files = {
-        "file": ("vector.png", resized_bytes, "image/png")
-    }
-
-    response = requests.post(url, headers=headers, files=files)
-    return response.json()
+    
+    # Save the uploaded image temporarily
+    filepath = save_uploaded_file(resized_bytes, image.filename or "upload.png")
+    image_url = get_image_url(filepath)
+    
+    # Use the provider system for vectorization (includes gradient flattening & color normalization)
+    result = await image_operations.vectorize(
+        image_url=image_url,
+        provider="recraft"
+    )
+    
+    # Extract the URL from the provider response
+    # Provider returns: {"provider": "recraft", "data": {"images": [{"url": "..."}]}}
+    if result.get("data") and result["data"].get("images"):
+        images = result["data"]["images"]
+        if len(images) > 0:
+            return {
+                "image": {
+                    "url": images[0].get("url")
+                }
+            }
+    
+    # Fallback: return the result as-is
+    return result

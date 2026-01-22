@@ -49,9 +49,15 @@ ALLOWED_ORIGINS = os.getenv(
     "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:5000,https://threeddd-design-editor.web.app,https://threeddd-design-editor.firebaseapp.com"
 ).split(",")
 
+# Allow all origins for development (set ALLOWED_ORIGINS="*" in env to restrict)
+if ALLOWED_ORIGINS == ["*"]:
+    allow_origins_config = ["*"]
+else:
+    allow_origins_config = ALLOWED_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],  # Allow all origins for now
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
