@@ -25,6 +25,8 @@ import {
   Wand2,
   Settings,
   Download,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 
 import MenuItem from "./ui/MenuItem";
@@ -46,7 +48,28 @@ const TopNav = () => {
     handleExport,
     isExportDialogOpen,
     setExportDialogOpen,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    canvas,
   } = useStore();
+
+  // Force re-render when history changes by checking canvas history state
+  const [historyUpdate, setHistoryUpdate] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!canvas) return;
+
+    const checkHistory = () => {
+      setHistoryUpdate((prev) => prev + 1);
+    };
+
+    // Check history periodically
+    const interval = setInterval(checkHistory, 100);
+
+    return () => clearInterval(interval);
+  }, [canvas]);
 
   const { isEnabled } = useFeatureFlagStore();
   const [showFeatureFlags, setShowFeatureFlags] = useState(false);
@@ -56,7 +79,7 @@ const TopNav = () => {
 
   const handleExportClick = () => {
     if (!hasSelection) {
-      alert('Please select an object to export');
+      alert("Please select an object to export");
       return;
     }
     setExportDialogOpen(true);
@@ -249,10 +272,37 @@ const TopNav = () => {
       </div>
 
       <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            undo();
+            setHistoryUpdate((prev) => prev + 1);
+          }}
+          disabled={!canUndo()}
+          className="rounded-lg text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo2 size={16} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            console.log("Redo button clicked");
+            redo();
+            setHistoryUpdate((prev) => prev + 1);
+          }}
+          disabled={!canRedo()}
+          className="rounded-lg text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Redo (Ctrl+Y)"
+        >
+          <Redo2 size={16} />
+        </Button>
         {hasSelection && (
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             icon={Download}
             className="font-sans font-semibold"
             onClick={handleExportClick}
@@ -262,7 +312,11 @@ const TopNav = () => {
         )}
 
         {isEnabled(FEATURES.SHARE_BUTTON) && (
-          <Button variant="primary" size="sm" className="font-sans font-semibold">
+          <Button
+            variant="primary"
+            size="sm"
+            className="font-sans font-semibold"
+          >
             Share
           </Button>
         )}
@@ -301,8 +355,8 @@ const TopNav = () => {
         isOpen={isExportDialogOpen}
         onClose={() => setExportDialogOpen(false)}
         onExport={handleExport}
-        objectName={selectedObject?.name || selectedObject?.type || 'object'}
-        isRasterImage={selectedObject?.type === 'image'}
+        objectName={selectedObject?.name || selectedObject?.type || "object"}
+        isRasterImage={selectedObject?.type === "image"}
       />
     </header>
   );

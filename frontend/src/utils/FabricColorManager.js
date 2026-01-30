@@ -30,13 +30,17 @@ class ColorQuantizer {
     const c = color.trim().toLowerCase();
     if (!c || c === "none" || c === "transparent") return null;
 
-    // #rgb / #rrggbb
+    // #rgb / #rrggbb / #rrggbbaa (8-digit with alpha)
     if (c.startsWith("#")) {
       if (c.length === 4) {
         const r = c[1], g = c[2], b = c[3];
         return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
       }
       if (c.length === 7) return c.toLowerCase();
+      if (c.length === 9) {
+        // 8-digit hex with alpha (#rrggbbaa) - strip alpha and return RGB
+        return c.substring(0, 7).toLowerCase();
+      }
       return null;
     }
 
@@ -497,8 +501,11 @@ class FabricColorManager {
       const area = rect ? Math.max(1, rect.width * rect.height) : 1;
 
       // fill
-      if (typeof obj.fill === "string") {
-        addHex(this.normalizeToHex(obj.fill), area);
+      if (typeof obj.fill === "string" && obj.fill) {
+        const hex = this.normalizeToHex(obj.fill);
+        if (hex) {
+          addHex(hex, area);
+        }
       } else if (obj.fill && typeof obj.fill === "object" && Array.isArray(obj.fill.colorStops)) {
         // Distribute area weight across gradient stops
         const stops = obj.fill.colorStops;
@@ -510,15 +517,21 @@ class FabricColorManager {
             const nextOffset = i < stops.length - 1 ? (stops[i + 1].offset || 1) : 1;
             const span = (nextOffset - prevOffset) / 2;
             const stopWeight = area * span;
-            addHex(this.normalizeToHex(stops[i]?.color), stopWeight);
+            const hex = this.normalizeToHex(stops[i]?.color);
+            if (hex) {
+              addHex(hex, stopWeight);
+            }
           }
         }
       }
 
       // stroke (usually thin, so reduce weight)
-      if (typeof obj.stroke === "string") {
+      if (typeof obj.stroke === "string" && obj.stroke) {
         const strokeWeight = obj.strokeWidth ? area * (obj.strokeWidth / 100) : area * 0.1;
-        addHex(this.normalizeToHex(obj.stroke), strokeWeight);
+        const hex = this.normalizeToHex(obj.stroke);
+        if (hex) {
+          addHex(hex, strokeWeight);
+        }
       }
     };
 

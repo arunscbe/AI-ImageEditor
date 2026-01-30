@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import * as fabric from "fabric";
 import { getApiUrl } from "../config/api";
-import { extractColorsFromImage, replaceColorInImage, hexToRgb } from "../utils/colorExtractor";
+import {
+  extractColorsFromImage,
+  replaceColorInImage,
+  hexToRgb,
+} from "../utils/colorExtractor";
 import { CANVAS_CONFIG } from "../constants/canvasConfig";
 
 const { IText, Rect, Circle, Line, Triangle, Group } = fabric;
@@ -12,8 +16,8 @@ const useStore = create((set, get) => ({
   setCanvas: (canvas) => set({ canvas }),
 
   isProcessing: false,
-  processingMessage: '',
-  setProcessing: (isProcessing, message = '') =>
+  processingMessage: "",
+  setProcessing: (isProcessing, message = "") =>
     set({ isProcessing, processingMessage: message }),
 
   projectIntent: null,
@@ -46,7 +50,7 @@ const useStore = create((set, get) => ({
       canvas.freeDrawingBrush.width = size;
     }
   },
-  brushColor: '#000000',
+  brushColor: "#000000",
   setBrushColor: (color) => {
     const { canvas } = get();
     set({ brushColor: color });
@@ -59,7 +63,8 @@ const useStore = create((set, get) => ({
   setSelectedObject: (obj) => set({ selectedObject: obj }),
 
   colorMergeTolerance: 0,
-  setColorMergeTolerance: (tolerance) => set({ colorMergeTolerance: tolerance }),
+  setColorMergeTolerance: (tolerance) =>
+    set({ colorMergeTolerance: tolerance }),
   focusObject: (obj) => {
     const canvas = get().canvas;
     if (!canvas || !obj) return;
@@ -96,7 +101,7 @@ const useStore = create((set, get) => ({
 
     requestAnimationFrame(animate);
   },
-  
+
   objectCount: 0,
   incrementObjectCount: () =>
     set((state) => ({ objectCount: state.objectCount + 1 })),
@@ -250,16 +255,16 @@ const useStore = create((set, get) => ({
     if (canvas) {
       const width = prompt("Enter canvas width (px):", "800");
       const height = prompt("Enter canvas height (px):", "600");
-      
+
       if (width && height) {
         const w = parseInt(width);
         const h = parseInt(height);
-        
+
         if (isNaN(w) || isNaN(h) || w <= 0 || h <= 0) {
           alert("Please enter valid positive numbers for width and height.");
           return;
         }
-        
+
         const pos = getNextPosition();
         const rect = new Rect({
           left: pos.left,
@@ -287,40 +292,41 @@ const useStore = create((set, get) => ({
     }
 
     try {
-      const url = mascot.url.startsWith('http') || mascot.url.startsWith('/assets') 
-        ? mascot.url 
-        : new URL(mascot.url, import.meta.url).href;
-      
+      const url =
+        mascot.url.startsWith("http") || mascot.url.startsWith("/assets")
+          ? mascot.url
+          : new URL(mascot.url, import.meta.url).href;
+
       const { objects, options } = await fabric.loadSVGFromURL(url);
-      
+
       if (!Array.isArray(objects) || objects.length === 0) {
-        throw new Error('SVG parsed but produced no Fabric objects.');
+        throw new Error("SVG parsed but produced no Fabric objects.");
       }
-      
+
       const group = fabric.util.groupSVGElements(objects, options);
-      
+
       const pos = getNextPosition();
-      
+
       group.set({
         left: pos.left,
         top: pos.top,
-        originX: 'left',
-        originY: 'center',
-        name: mascot.name || mascot.id
+        originX: "left",
+        originY: "center",
+        name: mascot.name || mascot.id,
       });
-      
+
       const maxSize = CANVAS_CONFIG.MASCOT_MAX_SIZE;
       const scale = Math.min(maxSize / group.width, maxSize / group.height);
       group.scale(scale);
-      
+
       canvas.add(group);
       canvas.setActiveObject(group);
       canvas.requestRenderAll();
-      
+
       get().focusObject(group);
       incrementObjectCount();
     } catch (error) {
-      alert('Failed to load mascot: ' + error.message);
+      alert("Failed to load mascot: " + error.message);
     }
   },
 
@@ -380,7 +386,15 @@ const useStore = create((set, get) => ({
     }
   },
   vectorizeAPI: async () => {
-    const { canvas, selectedObject, updateLayers, setProcessing, getNextPosition, focusObject, incrementObjectCount } = get();
+    const {
+      canvas,
+      selectedObject,
+      updateLayers,
+      setProcessing,
+      getNextPosition,
+      focusObject,
+      incrementObjectCount,
+    } = get();
 
     if (!selectedObject || selectedObject.type !== "image") {
       alert("Please select an image first.");
@@ -414,7 +428,7 @@ const useStore = create((set, get) => ({
 
       const svgResponse = await fetch(svgUrl);
       const svgText = await svgResponse.text();
-      
+
       const { objects, options } = await fabric.loadSVGFromString(svgText);
       const svg = fabric.util.groupSVGElements(objects, options);
 
@@ -430,7 +444,7 @@ const useStore = create((set, get) => ({
         svg.scaleX = scale;
         svg.scaleY = scale;
       }
-      
+
       svg.set({
         left: pos.left,
         top: pos.top,
@@ -454,56 +468,62 @@ const useStore = create((set, get) => ({
 
   mergeColorsOnCanvas: () => {
     const { selectedObject, colorMergeTolerance } = get();
-    
+
     if (!selectedObject || colorMergeTolerance === 0) {
       return;
     }
 
     const colors = extractColorsFromImage(selectedObject);
-    const allColors = colors.flatMap(group => group.colors);
-    
+    const allColors = colors.flatMap((group) => group.colors);
+
     if (allColors.length === 0) return;
-    
+
     const sorted = [...allColors].sort((a, b) => b.count - a.count);
     const merged = new Map(); // Maps less prominent color to most prominent color
     const used = new Set();
-    
+
     for (const color of sorted) {
       if (used.has(color.hex)) continue;
-      
-      const similar = sorted.filter(c => {
+
+      const similar = sorted.filter((c) => {
         if (used.has(c.hex) || c.hex === color.hex) return false;
-        
+
         // Calculate RGB distance
         const rgb1 = hexToRgb(color.hex);
         const rgb2 = hexToRgb(c.hex);
         const distance = Math.sqrt(
           Math.pow(rgb1.r - rgb2.r, 2) +
-          Math.pow(rgb1.g - rgb2.g, 2) +
-          Math.pow(rgb1.b - rgb2.b, 2)
+            Math.pow(rgb1.g - rgb2.g, 2) +
+            Math.pow(rgb1.b - rgb2.b, 2),
         );
         return distance <= colorMergeTolerance;
       });
-      
+
       used.add(color.hex);
-      
-      similar.forEach(c => {
+
+      similar.forEach((c) => {
         merged.set(c.hex, color.hex);
         used.add(c.hex);
       });
     }
-    
+
     merged.forEach((targetColor, sourceColor) => {
       replaceColorInImage(selectedObject, [sourceColor], targetColor);
     });
-    
+
     if (selectedObject.canvas) {
       selectedObject.canvas.renderAll();
     }
   },
 
   forRemovingBG: async () => {
-    const { canvas, selectedObject, focusObject, incrementObjectCount, setProcessing } = get();
+    const {
+      canvas,
+      selectedObject,
+      focusObject,
+      incrementObjectCount,
+      setProcessing,
+    } = get();
     const placement = {
       scaleX: selectedObject.scaleX,
       scaleY: selectedObject.scaleY,
@@ -587,7 +607,8 @@ const useStore = create((set, get) => ({
   },
 
   upscaleImage: async () => {
-    const { canvas, selectedObject, incrementObjectCount, setProcessing } = get();
+    const { canvas, selectedObject, incrementObjectCount, setProcessing } =
+      get();
 
     if (!selectedObject || selectedObject.type !== "image") {
       alert("Please select an image first.");
@@ -627,21 +648,26 @@ const useStore = create((set, get) => ({
       }
 
       // Call Gemini edit_image with enhancement prompt
-      const enhanceResponse = await fetch(getApiUrl("/conversation/user-enhance/message"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const enhanceResponse = await fetch(
+        getApiUrl("/conversation/user-enhance/message"),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: "Enhance this image quality without changing the design",
+            image_url: imageUrl,
+            style: "embroidery", // Default style, could be extracted from current selection
+            provider: "gemini",
+          }),
         },
-        body: JSON.stringify({
-          message: "Enhance this image quality without changing the design",
-          image_url: imageUrl,
-          style: "embroidery", // Default style, could be extracted from current selection
-          provider: "gemini",
-        }),
-      });
+      );
 
       if (!enhanceResponse.ok) {
-        throw new Error(`Enhancement failed! status: ${enhanceResponse.status}`);
+        throw new Error(
+          `Enhancement failed! status: ${enhanceResponse.status}`,
+        );
       }
 
       const enhanceData = await enhanceResponse.json();
@@ -695,7 +721,8 @@ const useStore = create((set, get) => ({
   },
 
   eraseRegion: async (maskDataURL) => {
-    const { canvas, selectedObject, incrementObjectCount, setProcessing } = get();
+    const { canvas, selectedObject, incrementObjectCount, setProcessing } =
+      get();
 
     if (!selectedObject || selectedObject.type !== "image") {
       alert("Please select an image first.");
@@ -709,14 +736,14 @@ const useStore = create((set, get) => ({
       const naturalWidth = imgElement.naturalWidth || imgElement.width;
       const naturalHeight = imgElement.naturalHeight || imgElement.height;
 
-      const tempCanvas = document.createElement('canvas');
+      const tempCanvas = document.createElement("canvas");
       tempCanvas.width = naturalWidth;
       tempCanvas.height = naturalHeight;
-      const tempCtx = tempCanvas.getContext('2d');
-      
+      const tempCtx = tempCanvas.getContext("2d");
+
       tempCtx.drawImage(imgElement, 0, 0, naturalWidth, naturalHeight);
-      
-      const imageDataURL = tempCanvas.toDataURL('image/png');
+
+      const imageDataURL = tempCanvas.toDataURL("image/png");
 
       const imageBlob = await (await fetch(imageDataURL)).blob();
       const maskBlob = await (await fetch(maskDataURL)).blob();
@@ -732,7 +759,9 @@ const useStore = create((set, get) => ({
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        throw new Error(
+          `HTTP error! status: ${response.status} - ${errorText}`,
+        );
       }
 
       const data = await response.json();
@@ -843,7 +872,7 @@ const useStore = create((set, get) => ({
 
           const { brushSize: eraserSize } = get();
           canvas.freeDrawingBrush.width = eraserSize;
-          canvas.freeDrawingBrush.color = '#ffffff';
+          canvas.freeDrawingBrush.color = "#ffffff";
         }
         set({ activeTool: "eraser" });
         break;
@@ -893,21 +922,23 @@ const useStore = create((set, get) => ({
         const clonedBoundingRect = clonedObj.getBoundingRect();
         const canvasCenter = canvas.getCenter();
         const viewportTransform = canvas.viewportTransform;
-        
+
         // Calculate the center point of the cloned object
-        const objCenterX = clonedBoundingRect.left + clonedBoundingRect.width / 2;
-        const objCenterY = clonedBoundingRect.top + clonedBoundingRect.height / 2;
-        
+        const objCenterX =
+          clonedBoundingRect.left + clonedBoundingRect.width / 2;
+        const objCenterY =
+          clonedBoundingRect.top + clonedBoundingRect.height / 2;
+
         // Pan the canvas to center the object
         const panX = canvasCenter.left - objCenterX;
         const panY = canvasCenter.top - objCenterY;
-        
+
         canvas.relativePan({ x: panX, y: panY });
         canvas.requestRenderAll();
 
         get().updateLayers();
       } catch (error) {
-        alert('Unable to duplicate this object');
+        alert("Unable to duplicate this object");
       }
     }
   },
@@ -920,35 +951,38 @@ const useStore = create((set, get) => ({
 
     const activeObject = canvas.getActiveObject();
     if (!activeObject) {
-      alert('Please select an object to export');
+      alert("Please select an object to export");
       return;
     }
 
-    const {
-      format = 'png',
-      quality = 1,
-      scale = 2,
-    } = options;
+    const { format = "png", quality = 1, scale = 2 } = options;
 
     try {
-      const objectName = activeObject.name || activeObject.type || 'object';
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const objectName = activeObject.name || activeObject.type || "object";
+      const timestamp = new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/:/g, "-");
       const filename = `${objectName}-${timestamp}.${format}`;
 
       // Handle SVG export separately
-      if (format === 'svg') {
+      if (format === "svg") {
         // Check if object is vector (not raster image)
-        if (activeObject.type === 'image') {
-          alert('Cannot export raster images as SVG. Please select a vector object or use PNG/JPG format.');
+        if (activeObject.type === "image") {
+          alert(
+            "Cannot export raster images as SVG. Please select a vector object or use PNG/JPG format.",
+          );
           return;
         }
 
         // Export as SVG
         const svgString = activeObject.toSVG();
-        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const blob = new Blob([svgString], {
+          type: "image/svg+xml;charset=utf-8",
+        });
         const url = URL.createObjectURL(blob);
 
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.download = filename;
         link.href = url;
         document.body.appendChild(link);
@@ -969,14 +1003,14 @@ const useStore = create((set, get) => ({
       activeObject.setCoords();
 
       const exportOptions = {
-        format: format === 'jpg' ? 'jpeg' : format,
+        format: format === "jpg" ? "jpeg" : format,
         quality: quality,
         multiplier: scale,
         enableRetinaScaling: true,
       };
 
-      if (format === 'jpg') {
-        exportOptions.backgroundColor = '#FFFFFF';
+      if (format === "jpg") {
+        exportOptions.backgroundColor = "#FFFFFF";
       }
 
       const dataURL = activeObject.toDataURL(exportOptions);
@@ -988,14 +1022,14 @@ const useStore = create((set, get) => ({
       activeObject.setCoords();
       canvas.renderAll();
 
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.download = filename;
       link.href = dataURL;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      alert('Failed to export object. Please try again.');
+      alert("Failed to export object. Please try again.");
     }
   },
 
@@ -1090,27 +1124,27 @@ const useStore = create((set, get) => ({
     setProcessing(true, "Loading AI generated image...");
 
     try {
-      const isSVG = url.toLowerCase().endsWith('.svg');
-      
+      const isSVG = url.toLowerCase().endsWith(".svg");
+
       if (isSVG) {
         const svgResponse = await fetch(url);
         const svgText = await svgResponse.text();
-        
+
         const { objects, options } = await fabric.loadSVGFromString(svgText);
-        
+
         if (!objects || objects.length === 0) {
-          throw new Error('Failed to parse SVG - no objects found');
+          throw new Error("Failed to parse SVG - no objects found");
         }
-        
+
         const svg = fabric.util.groupSVGElements(objects, options);
         const pos = getNextPosition();
-        
+
         const naturalWidth = svg.width || 100;
         const naturalHeight = svg.height || 100;
-        
+
         const maxSize = 512;
         let scale = 1;
-        
+
         if (naturalWidth > maxSize || naturalHeight > maxSize) {
           scale = Math.min(maxSize / naturalWidth, maxSize / naturalHeight);
         } else if (naturalWidth < 100 && naturalHeight < 100) {
@@ -1164,6 +1198,173 @@ const useStore = create((set, get) => ({
     } finally {
       setProcessing(false);
     }
+  },
+
+  // Undo/Redo functionality
+  undo: () => {
+    const { canvas } = get();
+    if (!canvas || !canvas.historyState) {
+      console.log("No canvas or history state");
+      return;
+    }
+
+    const historyState = canvas.historyState;
+
+    if (historyState.undos.length <= 1) {
+      console.log("Cannot undo: no history");
+      return; // Can't undo if no history or only initial state
+    }
+
+    // Disable history saving during restore
+    if (canvas.disableHistorySaving) {
+      canvas.disableHistorySaving();
+    } else {
+      historyState.isRestoring = true;
+    }
+
+    try {
+      // Save current state to redo stack
+      const currentState = JSON.stringify(
+        canvas.toJSON(["selectable", "evented"]),
+      );
+      historyState.redos.push(currentState);
+
+      // Get previous state
+      const previousState = historyState.undos.pop();
+
+      if (previousState) {
+        // Load the state (loadFromJSON accepts string or object)
+        canvas
+          .loadFromJSON(previousState, () => {
+            canvas.renderAll();
+            // Clear selection after restore
+            canvas.discardActiveObject();
+            get().setSelectedObject(null);
+            get().updateLayers();
+            // Re-enable history saving after a delay
+            if (canvas.enableHistorySaving) {
+              canvas.enableHistorySaving();
+            } else {
+              setTimeout(() => {
+                historyState.isRestoring = false;
+              }, 500);
+            }
+          })
+          .then(() => {
+            // Also handle promise if loadFromJSON returns a promise
+            canvas.renderAll();
+          })
+          .catch((error) => {
+            console.error("Error loading state:", error);
+            if (canvas.enableHistorySaving) {
+              canvas.enableHistorySaving();
+            } else {
+              historyState.isRestoring = false;
+            }
+          });
+      } else {
+        if (canvas.enableHistorySaving) {
+          canvas.enableHistorySaving();
+        } else {
+          historyState.isRestoring = false;
+        }
+      }
+    } catch (error) {
+      console.error("Error during undo:", error);
+      historyState.isRestoring = false;
+    }
+  },
+  redo: () => {
+    const { canvas } = get();
+    if (!canvas || !canvas.historyState) {
+      console.log("No canvas or history state");
+      return;
+    }
+
+    const historyState = canvas.historyState;
+    console.log(
+      "Redo called. Undos:",
+      historyState.undos.length,
+      "Redos:",
+      historyState.redos.length,
+    );
+
+    if (historyState.redos.length === 0) {
+      console.log("Cannot redo: no redo history");
+      return;
+    }
+
+    // Disable history saving during restore
+    if (canvas.disableHistorySaving) {
+      canvas.disableHistorySaving();
+    } else {
+      historyState.isRestoring = true;
+    }
+
+    try {
+      // Save current state to undo stack
+      const currentState = JSON.stringify(
+        canvas.toJSON(["selectable", "evented"]),
+      );
+      historyState.undos.push(currentState);
+
+      // Get next state
+      const nextState = historyState.redos.pop();
+
+      if (nextState) {
+        // Load the state (loadFromJSON accepts string or object)
+        canvas
+          .loadFromJSON(nextState, () => {
+            canvas.renderAll();
+            // Clear selection after restore
+            canvas.discardActiveObject();
+            get().setSelectedObject(null);
+            get().updateLayers();
+            // Re-enable history saving after a delay
+            if (canvas.enableHistorySaving) {
+              canvas.enableHistorySaving();
+            } else {
+              setTimeout(() => {
+                historyState.isRestoring = false;
+              }, 500);
+            }
+            console.log("Redo complete");
+          })
+          .then(() => {
+            // Also handle promise if loadFromJSON returns a promise
+            canvas.renderAll();
+          })
+          .catch((error) => {
+            console.error("Error loading state:", error);
+            if (canvas.enableHistorySaving) {
+              canvas.enableHistorySaving();
+            } else {
+              historyState.isRestoring = false;
+            }
+          });
+      } else {
+        if (canvas.enableHistorySaving) {
+          canvas.enableHistorySaving();
+        } else {
+          historyState.isRestoring = false;
+        }
+      }
+    } catch (error) {
+      console.error("Error during redo:", error);
+      historyState.isRestoring = false;
+    }
+  },
+  canUndo: () => {
+    const { canvas } = get();
+    return canvas && canvas.historyState
+      ? canvas.historyState.undos.length > 1
+      : false;
+  },
+  canRedo: () => {
+    const { canvas } = get();
+    return canvas && canvas.historyState
+      ? canvas.historyState.redos.length > 0
+      : false;
   },
 }));
 
