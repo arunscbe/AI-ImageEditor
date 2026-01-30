@@ -37,7 +37,6 @@ class LLMOrchestrator:
         
         defaults = ProviderDefaults(
             generate=provider_config.DEFAULT_PROVIDER_GENERATE,
-            enhance=provider_config.DEFAULT_PROVIDER_ENHANCE,
             vectorize=provider_config.DEFAULT_PROVIDER_VECTORIZE,
             erase=provider_config.DEFAULT_PROVIDER_ERASE
         )
@@ -197,9 +196,6 @@ class LLMOrchestrator:
         elif tool_name == "generate_image":
             logger.info(f"generate_image called with provider: {tool_input.get('provider', 'default')}")
             return await provider_manager.generate_image(**tool_input)
-        
-        elif tool_name == "upscale_image":
-            return await provider_manager.upscale_image(**tool_input)
         
         elif tool_name == "edit_image":
             return await provider_manager.edit_image(**tool_input)

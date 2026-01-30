@@ -54,13 +54,16 @@ def save_base64_image(base64_data: str, prefix: str = None) -> str:
     return str(filepath).replace("\\", "/")
 
 
-def save_pil_image(pil_image, prefix: str = None) -> str:
+def save_pil_image(pil_image, prefix: str = None, ensure_white_background: bool = True) -> str:
     """
     Save a PIL Image to disk and return the file path.
+    
+    Converts transparent backgrounds to white to avoid checkerboard patterns.
 
     Args:
         pil_image: PIL Image object or compatible image object
         prefix: Filename prefix (defaults to PREFIX_FINAL)
+        ensure_white_background: If True, convert transparent backgrounds to white (default: True)
 
     Returns:
         Relative file path to the saved image

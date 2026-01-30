@@ -119,10 +119,32 @@ class OrchestratorConfig:
         'process', 'analyze', 'improve', 'optimize'
     ]
     
+    # Simple edit keywords that don't require analysis
+    SIMPLE_EDIT_KEYWORDS = [
+        'remove background', 'remove bg', 'removebg',
+        'make it', 'change color', 'make blue', 'make red', 'make green',
+        'add text', 'remove', 'erase', 'delete',
+        'brighter', 'darker', 'lighter',
+        'crop', 'resize', 'rotate'
+    ]
+    
+    @staticmethod
+    def is_simple_edit(message: str) -> bool:
+        """Determine if message is a simple edit that doesn't need analysis"""
+        message_lower = message.lower()
+        return any(
+            keyword in message_lower 
+            for keyword in OrchestratorConfig.SIMPLE_EDIT_KEYWORDS
+        )
+    
     @staticmethod
     def should_auto_analyze(message: str, has_image_url: bool) -> bool:
         """Determine if message should trigger automatic image analysis"""
         if not has_image_url or not OrchestratorConfig.ANALYSIS_ENABLED:
+            return False
+        
+        # Skip analysis for simple edits
+        if OrchestratorConfig.is_simple_edit(message):
             return False
         
         message_lower = message.lower()

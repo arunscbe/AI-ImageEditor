@@ -113,6 +113,7 @@ const AIChatPanel = () => {
   const [fontStyle, setFontStyle] = useState("");
   const styleMenuRef = useRef(null);
   const providerMenuRef = useRef(null);
+  const textareaRef = useRef(null);
   const { selectedObject, canvas, addAIImage } = useStore();
   const isImageSelected = selectedObject && selectedObject.type === 'image' && typeof selectedObject.getSrc === 'function';
 
@@ -266,6 +267,7 @@ const AIChatPanel = () => {
       e.preventDefault();
       handleSubmit();
     }
+    // Shift+Enter allows new lines in textarea
   };
 
   return (
@@ -298,15 +300,27 @@ const AIChatPanel = () => {
         )}
 
         <div className="space-y-3">
-          <div className="flex items-center gap-2 w-full">
+          <div className="flex items-start gap-2 w-full">
             <div className="flex-1 min-w-0">
-              <input
-                type="text"
+              <textarea
+                ref={textareaRef}
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  // Auto-resize textarea
+                  if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+                  }
+                }}
                 onKeyDown={handleKeyDown}
                 placeholder="Describe what you want to create..."
-                className="w-full bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-[15px] font-normal leading-6 py-2 px-3"
+                rows={1}
+                className="w-full bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-[15px] font-normal leading-6 py-2 px-3 resize-none overflow-hidden break-words whitespace-pre-wrap"
+                style={{
+                  minHeight: 'auto',
+                  maxHeight: '120px',
+                }}
               />
             </div>
 

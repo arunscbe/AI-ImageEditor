@@ -13,15 +13,14 @@ ANALYZE_IMAGE_TOOL = {
     
     Use this FIRST when:
     - User provides an image without specific instructions
-    - Determining the best workflow for SVG generation
-    - Need to decide if upscaling before vectorization would help
+    - Determining the best workflow for processing
     
     The analysis returns actionable recommendations:
-    1. Whether to upscale first (if resolution < 1024px)
+    1. Whether image needs quality improvement (if resolution < 1024px)
     2. Whether suitable for vectorization (logos, icons, simple graphics)
-    3. Optimal processing order for best SVG quality
+    3. Optimal processing order for best results
     
-    ALWAYS analyze before processing uploaded images for vectorization.""",
+    ALWAYS analyze before processing uploaded images.""",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -75,80 +74,47 @@ GENERATE_IMAGE_TOOL = {
     }
 }
 
-UPSCALE_IMAGE_TOOL = {
-    "name": "upscale_image",
-    "description": """Enhance image quality with optional style-aware improvements.
-    
-    Use when user wants to improve image quality before vectorization or for better detail.
-    
-    DEFAULT PROVIDER: gemini (style-aware enhancement)
-    
-    If style is detected from image analysis, provide it for style-specific enhancement:
-    - embroidery: Preserves thread texture and stitch details
-    - leather: Maintains deboss/emboss characteristics
-    - screen_print: Keeps flat colors and high contrast
-    - woven: Preserves interlaced thread patterns
-    - sublimation: Enhances vibrant colors
-    - pvc: Maintains 3D raised effect
-    
-    Providers:
-    - gemini: DEFAULT - Style-aware enhancement or LANCZOS upscaling
-    - replicate: Real-ESRGAN for true resolution increase
-    - google-imagen: 2x/4x resolution upscaling""",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "image_url": {
-                "type": "string",
-                "description": "URL of the image to enhance/upscale"
-            },
-            "provider": {
-                "type": "string",
-                "enum": ["gemini", "replicate", "google-imagen"],
-                "description": "Provider to use (default: gemini)"
-            },
-            "style": {
-                "type": "string",
-                "enum": ["embroidery", "leather", "screen_print", "woven", "sublimation", "pvc"],
-                "description": "Detected style for style-aware enhancement (gemini only)"
-            },
-            "scale": {
-                "type": "number",
-                "description": "Upscale factor (2 or 4)"
-            }
-        },
-        "required": ["image_url"]
-    }
-}
-
 EDIT_IMAGE_TOOL = {
     "name": "edit_image",
-    "description": """Edit an existing image based on text instructions.
+    "description": """Edit and enhance an existing image based on text instructions.
     
-    Use when user wants to modify or transform an existing image.
+    This tool handles BOTH editing AND enhancement in a single call:
+    - Editing: Modify, transform, or change elements in the image
+    - Enhancement: Automatically improves quality (sharpening, artifact removal, resolution) for low-quality images
+    
+    Use when user wants to:
+    - Modify or transform an existing image
+    - Enhance image quality (automatically applied if image is low-resolution)
+    - Both edit and enhance (handled efficiently in one call)
     
     DEFAULT PROVIDER: gemini (use unless user requests otherwise)
     
     Best providers:
-    - gemini: DEFAULT - Excellent style control and prompt understanding (RECOMMENDED)
+    - gemini: DEFAULT - Excellent style control, prompt understanding, and automatic quality enhancement (RECOMMENDED)
     - google-imagen: Precise edits
     - openai: Optional - Creative edits with masks (use only if user requests)
-    - replicate (instruct-pix2pix): Instruction-based editing""",
+    - replicate (instruct-pix2pix): Instruction-based editing
+    
+    The tool automatically detects low-quality images and enhances them during editing.""",
     "input_schema": {
         "type": "object",
         "properties": {
             "image_url": {
                 "type": "string",
-                "description": "URL of the image to edit"
+                "description": "URL of the image to edit/enhance"
             },
             "prompt": {
                 "type": "string",
-                "description": "Instructions for editing the image"
+                "description": "Instructions for editing the image. Can include both editing and enhancement requests."
             },
             "provider": {
                 "type": "string",
-                "enum": ["google-imagen", "openai", "replicate"],
-                "description": "Provider to use"
+                "enum": ["gemini", "google-imagen", "openai", "replicate"],
+                "description": "Provider to use (default: gemini)"
+            },
+            "enhance_quality": {
+                "type": "boolean",
+                "description": "Automatically enhance image quality during edit if image is low-resolution or has quality issues (default: true for gemini provider)"
             }
         },
         "required": ["image_url", "prompt"]
@@ -234,10 +200,21 @@ VECTORIZE_IMAGE_TOOL = {
     REQUIRED PROVIDER: recraft (only provider that supports vectorization)
     ALWAYS use provider="recraft" for this operation.
     
-    Recraft automatically normalizes colors to brand colors for consistent output.
+    CRITICAL: Only call this tool when user EXPLICITLY requests vectorization in their message.
+    Do NOT call this tool if:
+    - analyze_image recommends vectorization (ignore those recommendations)
+    - User only asks to edit or enhance an image
+    - Analysis suggests "enhance_then_vectorize" (only do the enhance part via edit_image)
     
-    Use when user needs scalable graphics, logos, or vector artwork.
-    For best results, upscale low-resolution images BEFORE vectorizing.""",
+    ONLY call when user message explicitly contains:
+    - "vectorize this image"
+    - "convert to SVG"
+    - "make it vector"
+    - "turn into vector format"
+    - "vector format"
+    - "SVG format"
+    
+    For best results, use edit_image first to enhance low-resolution images before vectorizing.""",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -317,7 +294,6 @@ INGEST_FILE_TOOL = {
 ALL_TOOLS: List[Dict[str, Any]] = [
     ANALYZE_IMAGE_TOOL,
     GENERATE_IMAGE_TOOL,
-    UPSCALE_IMAGE_TOOL,
     EDIT_IMAGE_TOOL,
     IMAGE_TO_IMAGE_TOOL,
     REMOVE_BACKGROUND_TOOL,
@@ -334,5 +310,3 @@ def get_tool_by_name(name: str) -> Dict[str, Any]:
         if tool["name"] == name:
             return tool
     raise ValueError(f"Tool '{name}' not found")
-
-

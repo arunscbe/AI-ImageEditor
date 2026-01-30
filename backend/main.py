@@ -244,6 +244,21 @@ async def health_check():
     }
 
 
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get image cache statistics"""
+    from utils.image_cache import image_cache
+    return image_cache.get_stats()
+
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clear the image cache"""
+    from utils.image_cache import image_cache
+    image_cache.clear()
+    return {"message": "Cache cleared successfully"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

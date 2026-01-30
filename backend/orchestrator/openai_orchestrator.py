@@ -28,6 +28,7 @@ class OpenAIOrchestrator:
         self.model = model or orchestrator_config.OPENAI_ORCHESTRATOR_MODEL
         self.conversation_manager = conversation_manager or default_conv_manager
         self.system_prompt = self._build_system_prompt()
+        logger.info(f"OpenAI Orchestrator initialized with model: {self.model}")
     
     def _build_system_prompt(self) -> str:
         from config.prompts.orchestrator_prompts import ProviderDefaults
@@ -37,7 +38,6 @@ class OpenAIOrchestrator:
         
         defaults = ProviderDefaults(
             generate=provider_config.DEFAULT_PROVIDER_GENERATE,
-            enhance=provider_config.DEFAULT_PROVIDER_ENHANCE,
             vectorize=provider_config.DEFAULT_PROVIDER_VECTORIZE,
             erase=provider_config.DEFAULT_PROVIDER_ERASE
         )
@@ -62,6 +62,66 @@ class OpenAIOrchestrator:
             })
         return openai_tools
     
+    def _filter_vectorize_recommendations(self, result: Dict[str, Any], user_message: str) -> Dict[str, Any]:
+        """
+        Filter out vectorization recommendations from analysis unless user explicitly requested it.
+        
+        Args:
+            result: Analysis result dictionary
+            user_message: Original user message
+        
+        Returns:
+            Filtered result dictionary
+        """
+        # Check if user explicitly requested vectorization
+        vectorize_keywords = ["vectorize", "vector", "svg", "convert to svg", "make it vector"]
+        user_wants_vectorize = any(keyword in user_message.lower() for keyword in vectorize_keywords)
+        
+        if user_wants_vectorize:
+            # User wants vectorization, keep recommendations as-is
+            return result
+        
+        # User didn't explicitly request vectorization, filter it out
+        if isinstance(result, dict):
+            # Filter recommendations list
+            if "recommendations" in result:
+                recommendations = result.get("recommendations", [])
+                if isinstance(recommendations, list):
+                    filtered = [r for r in recommendations if "vectorize" not in str(r).lower()]
+                    result["recommendations"] = filtered
+            
+            # Filter recommended_workflow
+            if "recommended_workflow" in result:
+                workflow = result.get("recommended_workflow", "")
+                if "vectorize" in str(workflow).lower():
+                    # Replace "enhance_then_vectorize" with "enhance_only"
+                    if "enhance_then_vectorize" in workflow:
+                        result["recommended_workflow"] = "enhance_only"
+                    elif "vectorize_only" in workflow:
+                        result["recommended_workflow"] = "use_as_is"
+                    else:
+                        # Remove vectorize from workflow string
+                        result["recommended_workflow"] = workflow.replace("vectorize", "").strip()
+            
+            # Filter data.recommendations if nested
+            if "data" in result and isinstance(result["data"], dict):
+                if "recommendations" in result["data"]:
+                    recommendations = result["data"].get("recommendations", [])
+                    if isinstance(recommendations, list):
+                        filtered = [r for r in recommendations if "vectorize" not in str(r).lower()]
+                        result["data"]["recommendations"] = filtered
+                
+                if "recommended_workflow" in result["data"]:
+                    workflow = result["data"].get("recommended_workflow", "")
+                    if "vectorize" in str(workflow).lower():
+                        if "enhance_then_vectorize" in workflow:
+                            result["data"]["recommended_workflow"] = "enhance_only"
+                        elif "vectorize_only" in workflow:
+                            result["data"]["recommended_workflow"] = "use_as_is"
+        
+        logger.info(f"Filtered vectorization recommendations from analysis (user didn't explicitly request it)")
+        return result
+    
     async def process_message(
         self,
         message: str,
@@ -79,6 +139,8 @@ class OpenAIOrchestrator:
         if should_analyze:
             logger.info(f"Auto-triggering image analysis for URL: {image_urls[0]}")
             message = orchestrator_prompts.build_mandatory_analysis_prefix(image_urls[0], message)
+        elif image_urls and orchestrator_config.is_simple_edit(message):
+            logger.info(f"Skipping analysis for simple edit: '{message[:50]}...' (saves ~7s)")
         
         style = "embroidery"
         provider_override = None
@@ -118,6 +180,9 @@ class OpenAIOrchestrator:
         
         conversation = self.conversation_manager.get_or_create_conversation(conversation_id)
         conversation.add_message("user", message)
+        
+        # Store original message for filtering analysis recommendations
+        original_user_message = message
         
         messages = [
             {"role": "system", "content": self.system_prompt}
@@ -218,6 +283,10 @@ class OpenAIOrchestrator:
                             if url:
                                 generated_images.append(url)
                     
+                    # Filter out vectorization recommendations unless user explicitly requested it
+                    if tool_name == "analyze_image":
+                        result = self._filter_vectorize_recommendations(result, original_user_message)
+                    
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
@@ -274,9 +343,6 @@ class OpenAIOrchestrator:
         elif tool_name == "generate_image":
             logger.info(f"generate_image called with provider: {tool_input.get('provider', 'default')}")
             return await provider_manager.generate_image(**tool_input)
-        
-        elif tool_name == "upscale_image":
-            return await provider_manager.upscale_image(**tool_input)
         
         elif tool_name == "edit_image":
             return await provider_manager.edit_image(**tool_input)

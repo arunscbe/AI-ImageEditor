@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Optional
 class ProviderDefaults:
     """Default provider routing. Keep centralized and explicit."""
     generate: str = "gemini"
-    enhance: str = "gemini"
     vectorize: str = "recraft"
     erase: str = "recraft"
 
@@ -49,33 +48,45 @@ If the user provides any image URL or image input:
 - No other tool may be called before analysis completes.
 - If analysis fails, STOP and return the failure.
 
-2) STYLE-AWARE ENHANCEMENT (NO GUESSING)
-If analyze_image returns detected_style AND enhancement is required:
-- You MUST pass style=detected_style to upscale_image.
+2) STYLE-AWARE EDITING (NO GUESSING)
+If analyze_image returns detected_style AND editing/enhancement is required:
+- You MUST pass style=detected_style to edit_image.
 - You MAY NOT invent or guess a style.
-- If detected_style is null/empty/ambiguous, do NOT enhance.
+- If detected_style is null/empty/ambiguous, you may still edit but without style specification.
 
 3) PROVIDER LOCK-IN (NO SUBSTITUTION)
-- Generation/Edit -> {default_generate}
-- Enhancement/Upscaling -> {default_enhance}
+- Generation/Edit/Enhancement -> {default_generate}
 - Vectorization -> {default_vectorize} (exclusive capability)
 - Erase Region -> {default_erase} (exclusive capability)
 
 You MAY NOT substitute providers unless the user explicitly instructs you to use a different provider.
 
-4) WORKFLOW DECISION AUTHORITY (FOLLOW ANALYSIS)
-Workflow decisions MUST be derived from analyze_image output:
-- If recommended_workflow = "enhance_then_vectorize" -> enhance then vectorize.
-- If recommended_workflow = "vectorize_only" -> vectorize directly.
-- If recommended_workflow = "enhance_only" -> enhance only.
-- If recommended_workflow = "use_as_is" -> do not modify image.
+4) WORKFLOW DECISION AUTHORITY (NO AUTO-VECTORIZATION)
+When user requests image editing or enhancement:
+- Execute ONLY the requested operation (edit, enhance, etc.)
+- DO NOT automatically vectorize the result
+- User must explicitly request vectorization as a separate operation
 
-If recommended_workflow is missing:
-- Decide conservatively:
-  - Prefer "vectorize_only" only if the image is clean, high-contrast, and simple (logo/line-art).
-  - Otherwise "use_as_is" and ask for clarification ONLY if required to proceed.
+CRITICAL: IGNORE vectorization recommendations from analyze_image.
+- If analyze_image suggests "vectorize" or "enhance_then_vectorize", IGNORE the vectorize part
+- Only execute vectorization if the USER explicitly asks for it in their message
+- Analysis recommendations are INFORMATIONAL ONLY, not directives
 
-5) OUTPUT DISCIPLINE
+Only vectorize when:
+- User explicitly asks to "vectorize", "convert to SVG", or "make it vector"
+- User explicitly requests the vectorize_image tool
+- User message contains explicit vectorization keywords
+
+If analyze_image returns a recommended_workflow with "vectorize", treat it as informational only.
+Do NOT automatically execute vectorization even if analysis recommends it.
+
+5) EFFICIENT ENHANCEMENT + EDIT (OPTIMIZATION)
+When user requests editing or enhancement:
+- Use edit_image tool ONCE (it automatically enhances quality during editing if needed)
+- edit_image handles both enhancement and editing in a single efficient call
+- This reduces API calls and latency significantly
+
+6) OUTPUT DISCIPLINE
 - Primary output: tool calls only.
 - Natural language is limited to a brief success/failure confirmation.
 - Do NOT explain reasoning unless the user explicitly asks.
@@ -89,7 +100,7 @@ Violation of any constraint is considered a failure.
 
     TOOL_CONTRACTS = """=== TOOL CONTRACTS (REFERENCE) ===
 analyze_image(input: image_url|image) -> {detected_style: str|null, recommended_workflow: str|null, recommendations: list[str]}
-upscale_image(input: image_url|image, style: str|null, provider: str) -> enhanced_image_url
+edit_image(input: image_url|image, prompt: str, style: str|null, provider: str) -> edited_image_url
 vectorize_image(input: image_url|image, provider: str) -> svg_url
 erase_region(input: image_url|image, mask: any, provider: str) -> edited_image_url
 
@@ -121,7 +132,6 @@ Note: This section is reference only and does not relax constraints above.
         prompt = OrchestratorPrompts.BASE_SYSTEM_PROMPT_TEMPLATE.format(
             providers_info=providers_info,
             default_generate=defaults.generate,
-            default_enhance=defaults.enhance,
             default_vectorize=defaults.vectorize,
             default_erase=defaults.erase,
         )
@@ -185,7 +195,7 @@ Note: This section is reference only and does not relax constraints above.
             Mapping provider -> description
         """
         return {
-            "gemini": "Best for generation, editing, and upscaling. Strong style control.",
+            "gemini": "Best for generation, editing, and enhancement. Strong style control.",
             "recraft": "Required for vectorization and erase region. Fast; often normalizes colors.",
             "openai": "Optional. Use only if user explicitly requests OpenAI/DALL·E behavior.",
             "replicate": "Optional. Commonly used for photorealism/Flux-class models (if available).",
@@ -198,16 +208,15 @@ Note: This section is reference only and does not relax constraints above.
         Descriptions for logging/UI. Not for system enforcement.
 
         Args:
-            workflow_type: enhance_then_vectorize, vectorize_only, enhance_only, use_as_is
+            workflow_type: enhance_only, use_as_is, etc.
 
         Returns:
             Human readable description
         """
         workflows = {
-            "enhance_then_vectorize": "1) Enhance for quality 2) Vectorize for SVG output",
-            "vectorize_only": "Vectorize directly (image is already sufficient)",
-            "enhance_only": "Enhance only (not suitable for vectorization)",
-            "use_as_is": "Keep as raster (complex/photographic content)",
+            "enhance_only": "Enhance image quality",
+            "use_as_is": "Use image without modifications",
+            "edit_only": "Edit image based on instructions",
         }
         return workflows.get(workflow_type, "Standard processing workflow")
 

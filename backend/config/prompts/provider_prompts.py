@@ -5,7 +5,7 @@ Centralized prompt templates for all image generation providers.
 Single source of truth for:
 - Logo-only guardrails
 - Style blocks
-- Prompt builders for generate/edit/enhance
+- Prompt builders for generate/edit (enhancement is handled by edit)
 - Analysis prompt (structured JSON output)
 - Style detection keyword map (legacy fallback)
 """
@@ -31,9 +31,10 @@ class ProviderPrompts:
 
     LOGO_ONLY_OUTPUT = """OUTPUT TYPE (NON-NEGOTIABLE):
 - Generate LOGO ARTWORK ONLY (isolated graphic asset), NOT a product mockup.
-- Centered logo on plain background (transparent preferred; otherwise solid white).
+- Centered logo on solid white background (NOT transparent, NOT checkerboard pattern).
 - No scene, no environment, no props, no photography framing.
-- Keep safe margins around the logo (do not crop)."""
+- Keep safe margins around the logo (do not crop).
+- Background must be solid white (#FFFFFF) - never transparent or checkerboard."""
 
     GLOBAL_NEGATIVES = """ABSOLUTE NEGATIVES (DO NOT INCLUDE ANY OF THESE):
 - No cap, hat, jersey, shirt, hoodie, clothing, mannequin, person.
@@ -230,7 +231,7 @@ LOGO BRIEF:
 
 FINAL CHECKLIST (MUST PASS):
 - Logo only (no product/mockup/apparel).
-- Plain background (transparent or solid white).
+- Solid white background (#FFFFFF) - NOT transparent, NOT checkerboard pattern.
 - Crisp, vector-master edges (no blur halos, no pixelation, no double edges).
 - Text is sharp and readable (no distortions, no smear).
 - Keep safe margins; do not crop the logo.
@@ -245,7 +246,16 @@ FINAL CHECKLIST (MUST PASS):
         ink_color: Optional[str] = None,
         font_style: Optional[str] = None,
         max_colors: Optional[int] = None,
+        enhance_quality: bool = False,
     ) -> str:
+        """
+        Build edit prompt with optional quality enhancement.
+        
+        Args:
+            edit_instruction: User's edit instructions
+            enhance_quality: If True, include quality enhancement instructions
+                            (sharpening, artifact removal, etc.) along with edits
+        """
         style_block = ProviderPrompts.build_style_block(
             style,
             leather_color=leather_color,
@@ -254,51 +264,80 @@ FINAL CHECKLIST (MUST PASS):
             max_colors=max_colors,
         )
 
-        return f"""You are editing a LOGO ASSET (not a product mockup).
-
-{style_block}
-
-EDIT INSTRUCTIONS:
-{edit_instruction}
-
-OUTPUT REQUIREMENTS:
-- Return the edited logo only, centered, on transparent or white background.
-- No product mockups, no apparel, no scenes, no UI frames.
-- Preserve overall geometry unless the edit instruction explicitly changes it.
-- Maintain crisp vector-master edges and text legibility.
-""".strip()
-
-    @staticmethod
-    def build_enhancement_prompt(style: str) -> str:
-        """
-        Standalone enhancement prompt - NOT wrapped by build_edit_prompt().
-        Focused purely on quality improvement, no generation language.
-        """
-        style_hint = f" ({style} style)" if style and style != "unknown" else ""
-        
-        return f"""TASK: Enhance this logo{style_hint} quality. Do NOT redesign.
-
-INPUT: An existing logo that needs quality improvement only.
-
-ENHANCE:
+        # Build enhancement section if needed
+        enhancement_section = ""
+        if enhance_quality:
+            style_hint = f" ({style} style)" if style and style != "unknown" else ""
+            enhancement_section = f"""
+QUALITY ENHANCEMENT{style_hint} (APPLY FIRST):
 - Sharpen edges and outlines (remove blur, pixelation, jagged edges)
 - Clean up compression artifacts and noise
 - Make text crisp and legible
 - Smooth curves, ensure consistent stroke widths
 - Improve color clarity and boundaries between regions
+- Increase resolution if image is low-quality (aim for 2048x2048 or higher)
 
-PRESERVE (DO NOT CHANGE):
-- Exact design, layout, composition, and proportions
-- All colors (no recoloring, no new gradients, no shading)
-- Text content and font shapes
-- Overall style and character of the original
+"""
 
-OUTPUT:
-- Return the enhanced image only
-- Same dimensions or slightly larger for quality
-- Plain background (keep existing or use white/transparent)
-- No mockups, no product shots, no added elements
+        # Build style-specific preservation instructions
+        style_key = (style or "embroidery").lower().strip()
+        style_preservation_hint = ""
+        if style_key == "embroidery":
+            style_preservation_hint = "- PRESERVE thread texture characteristics and embroidery-specific visual qualities\n"
+        elif style_key == "leather":
+            style_preservation_hint = "- PRESERVE leather grain texture and deboss/emboss characteristics\n"
+        elif style_key == "screen_print":
+            style_preservation_hint = "- PRESERVE flat solid color blocks and screen print aesthetic\n"
+        elif style_key == "woven":
+            style_preservation_hint = "- PRESERVE weave texture patterns and woven label characteristics\n"
+        elif style_key == "sublimation":
+            style_preservation_hint = "- PRESERVE full-color gradients and sublimation print characteristics\n"
+        elif style_key == "pvc" or style_key == "rubber":
+            style_preservation_hint = "- PRESERVE PVC/rubber patch relief characteristics and edge definition\n"
+        
+        style_context = f" ({style_key} style)" if style_key != "unknown" and style_key else ""
+
+        # Structure preservation negative prompt (critical for edits)
+        structure_preservation = f"""
+STRUCTURE PRESERVATION{style_context} (CRITICAL - DO NOT VIOLATE):
+- PRESERVE all background elements, decorative elements, borders, frames, and surrounding design elements exactly as they appear in the original
+- PRESERVE the overall composition, layout, positioning, and spatial relationships
+- PRESERVE the exact positioning and size of elements unless explicitly asked to change them
+- PRESERVE text content, fonts, and typography unless the edit instruction specifically mentions changing text
+- PRESERVE the overall style, mood, and aesthetic of the original image
+{style_preservation_hint}
+COLOR PRESERVATION (MANDATORY):
+- MATCH existing logo colors exactly - use the same color palette, hues, saturation, and brightness as the original
+- PRESERVE all colors, gradients, and visual effects that are NOT part of the edit instruction
+- When adding new elements or modifying existing ones, use colors that match the existing logo color scheme
+- DO NOT introduce new colors unless the edit instruction explicitly requests a specific color change
+- DO NOT alter the color scheme, palette, or color relationships unless specifically requested
+- If the edit instruction mentions changing a color, ONLY change that specific color - keep all other colors identical
+
+- DO NOT add new elements, backgrounds, or decorative features unless explicitly requested
+- DO NOT remove existing elements unless the edit instruction explicitly asks to remove them
+- DO NOT change the aspect ratio, orientation, or overall dimensions
+- ONLY modify what the edit instruction explicitly requests - everything else must remain identical
+
+The edit should be surgical and precise - change ONLY what is requested, preserve EVERYTHING else including colors and style characteristics.
+"""
+
+        return f"""You are editing a LOGO ASSET (not a product mockup).
+
+{style_block}
+{enhancement_section}{structure_preservation}
+EDIT INSTRUCTIONS:
+{edit_instruction}
+
+OUTPUT REQUIREMENTS:
+- Return the edited logo only, centered, on solid white background (#FFFFFF) - NOT transparent, NOT checkerboard pattern.
+- No product mockups, no apparel, no scenes, no UI frames.
+- Apply ONLY the requested edit - preserve all other aspects of the original structure.
+- Maintain crisp vector-master edges and text legibility.
+- If quality enhancement was requested, ensure the output is sharp and high-resolution.
+- The result should look like the original image with ONLY the requested changes applied.
 """.strip()
+
 
     @staticmethod
     def detect_style_from_text(analysis_text: str) -> Optional[str]:

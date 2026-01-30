@@ -127,13 +127,28 @@ class GeminiProvider(BaseImageProvider):
         leather_color: str = None,
         ink_color: str = None,
         font_style: str = None,
+        enhance_quality: bool = None,
         **kwargs,
     ) -> Dict[str, Any]:
         """
         Edit an image using Gemini with style presets + global "logo-only" guardrails.
+        
+        Automatically enhances quality if image is low-resolution or enhance_quality=True.
+        This combines enhancement and editing in a single efficient call.
         """
         image_bytes = await self._download_image(image_url)
         pil_image = Image.open(BytesIO(image_bytes))
+        
+        # Auto-detect if enhancement is needed based on image resolution
+        # Default to True if not explicitly set (smart enhancement)
+        if enhance_quality is None:
+            width, height = pil_image.size
+            min_dimension = min(width, height)
+            # Auto-enhance if image is below 1024px or if explicitly requested
+            enhance_quality = min_dimension < 1024
+            logger.info(f"Auto-detected enhance_quality={enhance_quality} (resolution: {width}x{height})")
+        elif enhance_quality:
+            logger.info("Enhancement explicitly requested")
 
         # Use centralized prompts
         from config.prompts import provider_prompts
@@ -143,6 +158,7 @@ class GeminiProvider(BaseImageProvider):
             leather_color=leather_color,
             ink_color=ink_color,
             font_style=font_style,
+            enhance_quality=enhance_quality,
         )
 
         try:
@@ -212,7 +228,7 @@ class GeminiProvider(BaseImageProvider):
             analysis_prompt = provider_prompts.GEMINI_ANALYSIS_PROMPT
 
             response = self.client.models.generate_content(
-                model="gemini-2.0-flash-exp",
+                model="gemini-3-pro-image-preview",
                 contents=[pil_image, analysis_prompt]
             )
             
@@ -319,73 +335,21 @@ class GeminiProvider(BaseImageProvider):
     ) -> Dict[str, Any]:
         """
         Enhance image with style-aware quality improvement.
-        Uses Gemini's vision capabilities to enhance based on detected/provided style.
-        Uses a dedicated enhancement prompt (not wrapped with generation prompts).
+        Uses edit_image with enhancement enabled (simplified - no duplicate code).
         """
         logger.info(f"Enhancing image with style: {style}")
         
-        image_bytes = await self._download_image(image_url)
-        pil_image = Image.open(BytesIO(image_bytes))
-        width, height = pil_image.size
+        # Use edit_image with enhancement enabled - it handles both editing and enhancement
+        # This avoids duplicate code and uses the same proven enhancement logic
+        enhancement_prompt = "Enhance this image quality: sharpen edges, remove artifacts, improve resolution, make text crisp and legible. Preserve all design elements, colors, and composition exactly as they are."
         
-        # Use AI-powered enhancement with dedicated prompt (not edit_image wrapper)
-        logger.info(f"Applying AI enhancement for style: {style or 'generic'}")
-        try:
-            from config.prompts import provider_prompts
-            
-            # Use dedicated enhancement prompt - NOT wrapped by build_edit_prompt
-            enhancement_prompt = provider_prompts.build_enhancement_prompt(style or "")
-            
-            # Call generate_content directly with the image and enhancement prompt
-            # Use the same model that edit_image uses successfully
-            response = self.client.models.generate_content(
-                model="gemini-3-pro-image-preview",
-                contents=[pil_image, enhancement_prompt],
-            )
-            
-            # Extract generated image from response
-            if response.parts:
-                for part in response.parts:
-                    if hasattr(part, "inline_data") and part.inline_data:
-                        enhanced_image = part.as_image()
-                        filepath = save_pil_image(enhanced_image, prefix="final_")
-                        result_url = get_image_url(filepath)
-                        
-                        logger.info(f"AI enhancement completed successfully")
-                        return self.normalize_response({
-                            "images": [{"url": result_url, "local_path": filepath}],
-                            "enhancement_type": "ai_enhanced",
-                            "style": style
-                        })
-            
-            # If no image parts found, log and fall through to LANCZOS
-            logger.warning("Gemini returned no image parts, falling back to LANCZOS")
-            
-        except Exception as e:
-            logger.warning(f"AI enhancement failed, falling back to LANCZOS: {str(e)}")
-        
-        # Fallback: Basic LANCZOS upscaling
-        logger.info("Using LANCZOS interpolation for enhancement")
-        if upscale_factor == "x2":
-            scale = 2
-        elif upscale_factor in ("x4", "4"):
-            scale = 4
-        else:
-            scale = 2
-
-        new_width = width * scale
-        new_height = height * scale
-
-        upscaled = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        filepath = save_pil_image(upscaled, prefix="temp_")
-        result_url = get_image_url(filepath)
-
-        return self.normalize_response({
-            "images": [{"url": result_url, "local_path": filepath}],
-            "enhancement_type": "lanczos",
-            "upscale_factor": upscale_factor
-        })
+        return await self.edit_image(
+            image_url=image_url,
+            prompt=enhancement_prompt,
+            style=style or "embroidery",
+            enhance_quality=True,
+            **kwargs
+        )
 
     def _detect_style_from_analysis(self, analysis_text: str) -> str:
         """
@@ -402,16 +366,16 @@ class GeminiProvider(BaseImageProvider):
         return provider_prompts.detect_style_from_text(analysis_text)
     
     async def _download_image(self, url: str) -> bytes:
-        """Download image from URL or decode from base64"""
+        """Download image from URL or decode from base64 (with caching)"""
         if url.startswith("data:"):
             import base64
 
             header, encoded = url.split(",", 1)
             return base64.b64decode(encoded)
 
-        response = await self._http_client.get(url)
-        response.raise_for_status()
-        return response.content
+        # Use cached download
+        from utils.image_cache import download_image_cached
+        return await download_image_cached(url, self._http_client)
 
     def get_available_models(self) -> List[str]:
         return [

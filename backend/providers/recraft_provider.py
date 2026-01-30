@@ -561,10 +561,9 @@ class RecraftProvider(BaseImageProvider):
         Vectorize a raster image to SVG
         Recraft requires file upload, not URL
         """
-        # Download the image first
-        image_response = await self._client.get(image_url)
-        image_response.raise_for_status()
-        image_bytes = image_response.content
+        # Download the image first (with caching)
+        from utils.image_cache import download_image_cached
+        image_bytes = await download_image_cached(image_url, self._client)
         
         # Ensure minimum size (256x256)
         from PIL import Image
