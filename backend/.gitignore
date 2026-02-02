@@ -1,0 +1,107 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv*/
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.docker
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+.cache/
+nosetests.xml
+coverage.xml
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Generated images and temporary files
+generated_images/
+# Temporary uploaded/generated images (but allow docs/images)
+temp_*.png
+temp_*.jpg
+temp_*.jpeg
+upload_*.png
+upload_*.jpg
+upload_*.jpeg
+final_*.png
+final_*.jpg
+final_*.jpeg
+final_*.svg
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Google Cloud
+.gcloudignore
+*.key.json
+service-account*.json
+
+# Docker
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Local configuration
+config.local.py
+settings.local.py
