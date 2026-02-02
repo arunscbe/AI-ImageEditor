@@ -328,7 +328,15 @@ const ImagePropertiesPanel = ({ embedded = false, flattened = false }) => {
     if (selectedColorIndex !== null && selectedColor) {
       const oldColor = selectedColor.hex;
       
-      replaceColorInImage(selectedObject, [oldColor], newColor);
+      replaceColorInImage(selectedObject, [oldColor], newColor, 0, () => {
+        // Trigger modified event and save history after color replacement
+        if (canvas) {
+          canvas.fire?.("object:modified", { target: selectedObject });
+          if (canvas.saveHistoryState) {
+            canvas.saveHistoryState();
+          }
+        }
+      });
 
       setTimeout(() => {
         const colors = extractColorsFromImage(selectedObject);

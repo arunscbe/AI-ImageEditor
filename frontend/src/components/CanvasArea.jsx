@@ -153,20 +153,33 @@ const CanvasArea = ({ projectId }) => {
 
     // Debounced save state to avoid too many saves
     let saveTimeout;
-    const debouncedSaveState = () => {
+    const debouncedSaveState = (delay = 100) => {
       if (historyState.isRestoring) {
         return;
       }
       clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(saveState, 300);
+      saveTimeout = setTimeout(saveState, delay);
     };
 
-    // Event handlers
+    // Immediate save for critical property changes (colors, etc.)
+    const immediateSaveState = () => {
+      if (historyState.isRestoring) {
+        return;
+      }
+      clearTimeout(saveTimeout);
+      saveState();
+    };
+
+    // Event handlers - save immediately for modifications (includes color changes)
     const handlers = {
       added: debouncedSaveState,
       removed: debouncedSaveState,
-      modified: debouncedSaveState,
+      modified: immediateSaveState, // Save immediately on modifications (color changes trigger this)
       pathCreated: debouncedSaveState,
+      moving: debouncedSaveState, // Debounce moving/scaling/rotating
+      scaling: debouncedSaveState,
+      rotating: debouncedSaveState,
+      afterRender: () => {}, // Don't save on every render, only on actual changes
     };
 
     // Store handlers for later removal
@@ -180,6 +193,18 @@ const CanvasArea = ({ projectId }) => {
     canvas.on("object:removed", handlers.removed);
     canvas.on("object:modified", handlers.modified);
     canvas.on("path:created", handlers.pathCreated);
+    canvas.on("object:moving", handlers.moving);
+    canvas.on("object:scaling", handlers.scaling);
+    canvas.on("object:rotating", handlers.rotating);
+    
+    // Note: after:render handler removed - we save on object:modified instead
+    
+    // Expose save function for manual calls from components
+    canvas.saveHistoryState = () => {
+      if (!historyState.isRestoring) {
+        immediateSaveState();
+      }
+    };
 
     // Function to temporarily disable history saving
     canvas.disableHistorySaving = () => {
@@ -188,6 +213,10 @@ const CanvasArea = ({ projectId }) => {
       canvas.off("object:removed", handlers.removed);
       canvas.off("object:modified", handlers.modified);
       canvas.off("path:created", handlers.pathCreated);
+      canvas.off("object:moving", handlers.moving);
+      canvas.off("object:scaling", handlers.scaling);
+      canvas.off("object:rotating", handlers.rotating);
+      canvas.off("after:render", handlers.afterRender);
     };
 
     // Function to re-enable history saving
@@ -198,6 +227,10 @@ const CanvasArea = ({ projectId }) => {
         canvas.on("object:removed", handlers.removed);
         canvas.on("object:modified", handlers.modified);
         canvas.on("path:created", handlers.pathCreated);
+        canvas.on("object:moving", handlers.moving);
+        canvas.on("object:scaling", handlers.scaling);
+        canvas.on("object:rotating", handlers.rotating);
+        canvas.on("after:render", handlers.afterRender);
       }, 500); // Longer delay to ensure all events have fired
     };
 

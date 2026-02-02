@@ -88,6 +88,16 @@ const TextPropertiesPanel = ({ embedded = false, flattened = false }) => {
             }
         }
 
+        // Trigger modified event to ensure history is saved
+        canvas.fire('object:modified', { target: selectedObject });
+        
+        // For color changes, save immediately (no debounce)
+        if (key === 'fill' || key === 'stroke' || (typeof key === 'object' && (key.fill || key.stroke))) {
+            if (canvas.saveHistoryState) {
+                canvas.saveHistoryState();
+            }
+        }
+        
         canvas.renderAll();
 
         const updatedDims = {

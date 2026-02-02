@@ -345,7 +345,7 @@ export const extractColorsFromImage = (fabricObject) => {
   return groupedColors;
 };
 
-export const replaceColorInImage = (fabricObject, fromColors, toColor, tolerance = 0) => {
+export const replaceColorInImage = (fabricObject, fromColors, toColor, tolerance = 0, onComplete) => {
   if (!fabricObject) {
     return;
   }
@@ -422,5 +422,19 @@ export const replaceColorInImage = (fabricObject, fromColors, toColor, tolerance
   };
 
   replaceInObject(fabricObject);
-  fabricObject.canvas?.renderAll();
+  
+  // Trigger modified event to ensure history is saved
+  const canvas = fabricObject.canvas;
+  if (canvas) {
+    canvas.fire?.("object:modified", { target: fabricObject });
+    if (canvas.saveHistoryState) {
+      canvas.saveHistoryState();
+    }
+    canvas.renderAll();
+  }
+  
+  // Call onComplete callback if provided
+  if (typeof onComplete === 'function') {
+    onComplete(fabricObject);
+  }
 };

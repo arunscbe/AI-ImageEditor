@@ -128,6 +128,13 @@ export default function SVGColorPalette({ selectedObject }) {
       const map = new Map();
       map.set(from, to);
       await applyColorMapToSelection({ selectedObject, canvas, colorMap: map });
+      
+      // Trigger modified event and save history
+      canvas.fire?.("object:modified", { target: selectedObject });
+      if (canvas.saveHistoryState) {
+        canvas.saveHistoryState();
+      }
+      
       const updatedPalette = refreshPalette();
       setPalette(updatedPalette);
       // Preserve original palette size (don't let it shrink)

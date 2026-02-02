@@ -683,8 +683,16 @@ class FabricColorManager {
     if (selectedObject.set) selectedObject.set('dirty', true);
     if (selectedObject.setCoords) selectedObject.setCoords();
 
+    // Trigger modified event to ensure history is saved
+    canvas.fire?.("object:modified", { target: selectedObject });
+    
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
+    
+    // Also manually save history if available
+    if (canvas.saveHistoryState) {
+      canvas.saveHistoryState();
+    }
   }
 
   /**
