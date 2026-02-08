@@ -11,3 +11,6 @@ openai
 anthropic
 google-cloud-aiplatform
 google-genai
+SQLAlchemy>=1.4
+asyncpg
+alembic

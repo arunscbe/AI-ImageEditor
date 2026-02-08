@@ -5,20 +5,20 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional, List
 import os
-import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Import centralized logger (this will configure logging on import)
+from logger import get_logger
+
+logger = get_logger(__name__)
+from database.db import create_db_and_tables
+from database.models import Base
 from generateImage import router as generateImage_router
 from removeBG import router as removeBG_router
 from vectorizeImage import router as vectorize_router
 from upscaleImage import router as upscale_router
 from eraseRegion import router as erase_router
 from test import testinApp
+from api import projects_router, images_router
 
 from providers.provider_manager import provider_manager
 from utils.image_storage import save_pil_image, get_image_url
@@ -29,24 +29,42 @@ ORCHESTRATOR_TYPE = os.getenv("ORCHESTRATOR_TYPE", "openai").lower()
 
 orchestrator = None
 
+
 def get_orchestrator_instance():
     global orchestrator
     if orchestrator is None:
         if ORCHESTRATOR_TYPE == "claude":
             from orchestrator.llm_orchestrator import get_orchestrator
+
             orchestrator = get_orchestrator()
         elif ORCHESTRATOR_TYPE == "openai":
             from orchestrator.openai_orchestrator import get_openai_orchestrator
+
             orchestrator = get_openai_orchestrator()
         else:
-            raise ValueError(f"Invalid ORCHESTRATOR_TYPE: {ORCHESTRATOR_TYPE}. Use 'claude' or 'openai'")
+            raise ValueError(
+                f"Invalid ORCHESTRATOR_TYPE: {ORCHESTRATOR_TYPE}. Use 'claude' or 'openai'"
+            )
     return orchestrator
+
 
 app = FastAPI(title="AI Image Editor API")
 
+
+@app.on_event("startup")
+async def startup():
+    # Optionally create tables in the target DB when env var is set
+    try:
+        if os.getenv("CREATE_TABLES", "0") == "1":
+            await create_db_and_tables(Base)
+            logger.info("Database tables ensured (CREATE_TABLES=1)")
+    except Exception as e:
+        logger.error(f"Failed to ensure DB tables on startup: {e}")
+
+
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:5000,https://threeddd-design-editor.web.app,https://threeddd-design-editor.firebaseapp.com"
+    "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:5000,https://threeddd-design-editor.web.app,https://threeddd-design-editor.firebaseapp.com",
 ).split(",")
 
 # Allow all origins for development (set ALLOWED_ORIGINS="*" in env to restrict)
@@ -90,15 +108,21 @@ async def options_handler(request: Request, full_path: str):
         },
     )
 
+
 # Register ALL routers
 app.include_router(generateImage_router)
 app.include_router(removeBG_router)
 app.include_router(vectorize_router)
 app.include_router(upscale_router)
 app.include_router(erase_router)
+app.include_router(projects_router)
+app.include_router(images_router)
+
+
 @app.get("/test")
 def test_route():
     return testinApp()
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -115,16 +139,19 @@ class ChatResponse(BaseModel):
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     try:
-        logger.info(f"Chat request received - conversation_id: {request.conversation_id}")
+        logger.info(
+            f"Chat request received - conversation_id: {request.conversation_id}"
+        )
         logger.debug(f"Message: {request.message[:200]}")
-        
+
         orch = get_orchestrator_instance()
         result = await orch.process_message(
-            message=request.message,
-            conversation_id=request.conversation_id
+            message=request.message, conversation_id=request.conversation_id
         )
-        
-        logger.info(f"Chat response - actions: {result.get('actions_taken', [])}, images: {len(result.get('images', []))}")
+
+        logger.info(
+            f"Chat response - actions: {result.get('actions_taken', [])}, images: {len(result.get('images', []))}"
+        )
         return ChatResponse(**result)
     except Exception as e:
         logger.error(f"Chat endpoint error: {str(e)}", exc_info=True)
@@ -136,24 +163,21 @@ async def upload_canvas_image(image: UploadFile = File(...)):
     try:
         contents = await image.read()
         pil_image = Image.open(BytesIO(contents))
-        
+
         filepath = save_pil_image(pil_image, prefix="upload_")
         image_url = get_image_url(filepath)
-        
+
         return {
             "url": image_url,
             "local_path": filepath,
-            "message": "Canvas image uploaded successfully"
+            "message": "Canvas image uploaded successfully",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
 
 @app.post("/ingest/upload")
-async def ingest_upload(
-    file: UploadFile = File(...),
-    vectorize: bool = True
-):
+async def ingest_upload(file: UploadFile = File(...), vectorize: bool = True):
     """
     Upload and process a file (PNG/JPG/PDF/AI)
     Automatically routes to appropriate processing:
@@ -162,15 +186,13 @@ async def ingest_upload(
     """
     try:
         from services.ingestion_service import ingestion_service
-        
+
         file_data = await file.read()
-        
+
         result = await ingestion_service.process_upload(
-            file_data=file_data,
-            filename=file.filename,
-            vectorize=vectorize
+            file_data=file_data, filename=file.filename, vectorize=vectorize
         )
-        
+
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
@@ -180,27 +202,26 @@ async def ingest_upload(
 async def analyze_image(request: dict):
     """
     Analyze an image to determine quality and recommend processing workflow.
-    
+
     Request body:
     {
         "image_url": "https://example.com/image.png",
         "provider": "gemini"  // optional, defaults to gemini
     }
-    
+
     Returns analysis with recommendations for upscaling, vectorization, etc.
     """
     try:
         image_url = request.get("image_url")
         if not image_url:
             raise HTTPException(status_code=400, detail="image_url is required")
-        
+
         provider = request.get("provider", "gemini")
-        
+
         result = await provider_manager.analyze_image(
-            image_url=image_url,
-            provider=provider
+            image_url=image_url, provider=provider
         )
-        
+
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -240,10 +261,11 @@ async def health_check():
     return {
         "status": "healthy",
         "providers": len(provider_manager.providers),
-        "orchestrator": ORCHESTRATOR_TYPE
+        "orchestrator": ORCHESTRATOR_TYPE,
     }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
